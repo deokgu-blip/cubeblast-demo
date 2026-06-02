@@ -48,7 +48,7 @@
         ④ <b>틴트 미리보기</b>로 인게임 색 확인<br>
         ⑤ <b>저장</b> → 받은 파일을 디스코드로 보내면 게임 적용<br>
         ↩ 실수하면 <b>되돌리기</b> (Ctrl/⌘+Z)<br>
-        🖱️ 빈 곳 드래그=회전 · 휠=확대축소
+        🖱️ 드래그=회전 · 휠=확대/축소 · <b>브러시 중엔 휠버튼 누르고 드래그=회전</b>
       </div>
     </div>
 
@@ -3785,6 +3785,22 @@ const fill = new THREE.DirectionalLight(0xbfe0ff, 0.45); fill.position.set(-1.6,
 const rim  = new THREE.DirectionalLight(0xffe6c0, 0.55); rim.position.set(-0.6, 1.2, -1.8); scene.add(rim);
 scene.add(new THREE.AmbientLight(0xffffff, 0.18));
 
+// brush size indicator ring (shows the paint radius on the surface)
+const brushRing = new THREE.Mesh(new THREE.RingGeometry(0.84,1,40),
+  new THREE.MeshBasicMaterial({color:0x3ad0ff, transparent:true, opacity:0.95, side:THREE.DoubleSide, depthTest:false}));
+brushRing.renderOrder = 999; brushRing.visible = false; scene.add(brushRing);
+const _normalMat = new THREE.Matrix3();
+function updateBrushRing(hit){
+  if(selectMode!=='brush' || !mesh || !hit || !hit.face){ brushRing.visible=false; return; }
+  const r = (parseFloat(brushSz.value)/100)*1.0;
+  _normalMat.getNormalMatrix(mesh.matrixWorld);
+  const wn = hit.face.normal.clone().applyMatrix3(_normalMat).normalize();
+  brushRing.position.copy(hit.point).addScaledVector(wn, 0.01);
+  brushRing.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), wn);
+  brushRing.scale.set(r,r,1);
+  brushRing.visible = true;
+}
+
 // ---------- State ----------
 let mesh = null;            // THREE.Mesh
 let geom = null;            // BufferGeometry
@@ -4098,21 +4114,28 @@ cv.addEventListener('pointerdown', ev=>{
   cv.setPointerCapture(ev.pointerId);
   lastX=ev.clientX; lastY=ev.clientY; dragMoved=false;
   pointerNDC(ev);
+  // middle button (wheel press) = orbit, even while in brush mode
+  if(ev.button===1){ ev.preventDefault(); dragging=true; return; }
   if(selectMode==='brush'){
     painting=true;
     pushUndo();
     const hit=raycastHit();
+    updateBrushRing(hit);
     if(hit) brushPaintAt(hit);
   } else {
     dragging=true; // also allow orbit; selection happens on click (no move)
   }
 });
+cv.addEventListener('mousedown', e=>{ if(e.button===1) e.preventDefault(); }); // block middle-click autoscroll
+cv.addEventListener('auxclick', e=>e.preventDefault());
+cv.addEventListener('pointerleave', ()=>{ brushRing.visible=false; });
 cv.addEventListener('pointermove', ev=>{
   const dx=ev.clientX-lastX, dy=ev.clientY-lastY;
   if(Math.abs(dx)+Math.abs(dy)>3) dragMoved=true;
+  pointerNDC(ev);
   if(painting){
-    pointerNDC(ev);
     const hit=raycastHit();
+    updateBrushRing(hit);
     if(hit) brushPaintAt(hit);
     return;
   }
@@ -4122,7 +4145,10 @@ cv.addEventListener('pointermove', ev=>{
     camPhi = Math.max(0.15, Math.min(Math.PI-0.15, camPhi));
     lastX=ev.clientX; lastY=ev.clientY;
     updateCamera();
+    if(selectMode==='brush') updateBrushRing(raycastHit());  // keep ring while orbiting in brush
+    return;
   }
+  if(selectMode==='brush') updateBrushRing(raycastHit());     // hover: show brush size ring
 });
 cv.addEventListener('pointerup', ev=>{
   cv.releasePointerCapture(ev.pointerId);
@@ -4174,6 +4200,7 @@ document.querySelectorAll('input[name="smode"]').forEach(el=>{
     brushRow.style.display = brush ? 'block':'none';
     segRow.style.display   = (!brush && weldedSingle) ? 'block':'none';
     cv.style.cursor = brush ? 'crosshair' : 'pointer';
+    if(!brush) brushRing.visible=false;
   });
 });
 brushSz.addEventListener('input', ()=>{ brushVal.textContent = brushSz.value; });
