@@ -5160,6 +5160,20 @@
     return null;
   }
   function colorHasVisible(group){ return pickTarget(group)!==null; }
+  // 멀티샷: 같은 색 가시 타겟을 최대 count개 골라 배열로. pickTarget이 reserved를 제외하므로
+  // 임시 예약하며 중복 없이 뽑고, 호출 측이 spawnBullet으로 정식 예약(target.reserved=true)할 때까지의
+  // 임시 예약은 그대로 둔다(뽑힌 만큼 곧 발사됨). 발사 실패분은 호출 측이 _picksRelease로 해제.
+  const _multiPicks=[];
+  function pickTargets(group, count){
+    _multiPicks.length=0;
+    for (let k=0;k<count;k++){
+      const tv=pickTarget(group);
+      if (!tv) break;
+      tv.reserved=true;            // 다음 pickTarget이 이 voxel을 다시 안 고르게 즉시 예약
+      _multiPicks.push(tv);
+    }
+    return _multiPicks;   // 주의: 다음 pickTargets 호출 전에 소비할 것(스크래치 재사용)
+  }
   // 가시성·occlusion 무시. 색에 활성 보셀이 1개라도 남아있으면 true.
   // (실패 조건 판정용 — 회전으로 잠시 안 보이는 경우에도 슬롯은 '발사 가능'으로 간주)
   function colorHasAny(group){
@@ -5650,6 +5664,16 @@
     muzzle.position.set(0, 0.85, 0);                 // local — 머리 상단(스케일·틸트 적용 후 머리 꼭대기 중앙)
     inst.add(muzzle);
     inst.userData.muzzle=muzzle;
+    // 멀티샷 3 발사구(입·왼총구·오른총구). OCTO_COLORS 정점색으로 군집화해 구한 모델 로컬좌표(베이스 중심정렬 기준).
+    //   입  = 얼굴 정면 노란 군집 중심,  왼/오른 총구 = 어두운(총) 정점 2군집의 바깥·전방·위쪽 끝(배럴 입구).
+    // 메시는 grp 안에 추가됐고 베이스 지오는 grp 원점 중심정렬되어 있으므로, 이 좌표를 inst(=grp)의 자식 앵커로 두면
+    // 스케일·yaw·틸트·deploy 슬라이드 모든 변환을 그대로 따라가 "항상 입·총구에서 발사"가 보장된다.
+    const mkAnchor=(x,y,z)=>{ const a=new THREE.Object3D(); a.position.set(x,y,z); inst.add(a); return a; };
+    inst.userData.muzzles=[
+      mkAnchor(-0.02, -0.01, 0.25),   // mouth (얼굴 정면)
+      mkAnchor(-0.439, 0.029, 0.333), // left pistol muzzle
+      mkAnchor( 0.44,  0.003, 0.407), // right pistol muzzle
+    ];
     blasterRig.add(inst);
     return inst;
   }
@@ -6019,10 +6043,12 @@
     // 미사용 정점(이 slot 영역 내): position 0(degenerate). 업로드는 updateBullets에서 1회.
     for (; k<posEnd; k++) pos[k]=0;
   }
-  function spawnBullet(octoObj, group, target, source){
+  // originAnchor: 총알이 나올 발사구 앵커(입/총구). 없으면 머리중심 머즐로 폴백(기존 동작).
+  function spawnBullet(octoObj, group, target, source, originAnchor){
     let b=null; for (let i=0;i<BULLET_POOL.length;i++){ if(!BULLET_POOL[i].active){ b=BULLET_POOL[i]; break; } }
     if (!b) return false;  // 풀 고갈: 호출자가 발사 실패를 인지해 카운터 차감을 미루도록
-    if (octoObj && octoObj.userData.muzzle){ octoObj.userData.muzzle.getWorldPosition(_v1); }   // 머리중심 앵커(yaw/틸트 따라감)
+    if (originAnchor){ originAnchor.getWorldPosition(_v1); }                                       // 멀티샷 발사구(입/총구)
+    else if (octoObj && octoObj.userData.muzzle){ octoObj.userData.muzzle.getWorldPosition(_v1); } // 머리중심 앵커(yaw/틸트 따라감)
     else if (octoObj){ octoObj.getWorldPosition(_v1); _v1.y += OCTO.scale*0.85; }                 // 폴백(앵커 없을 때)
     else { _v1.set(0, OCTO.yOff+OCTO.scale, -OCTO.dist); blasterRig.localToWorld(_v1); }
     b.active=true; b.target=target; b.group=group; b.source=source||null;
@@ -6226,24 +6252,39 @@
     if (c.bullets<=0) return;
     c.fireCooldown-=dt;
     if (c.fireCooldown<=0){
-      const tv=pickTarget(c.color);
-      if (tv){
-        // 풀 고갈 시 발사 실패 → 카운터 차감 미루고 다음 프레임 재시도
-        if (spawnBullet(c.octo, c.color, tv, c)){
+      // 멀티샷: 입·왼총구·오른총구 3곳에서 같은 색 타겟 최대 3개를 동시 발사.
+      // 남은 탄/가시 타겟이 3개 미만이면 있는 만큼만. pickTargets가 임시 예약하며 중복 없이 뽑는다.
+      const wantN=Math.min(3, c.bullets);
+      const picks=pickTargets(c.color, wantN);   // 스크래치(_multiPicks) — 즉시 소비
+      const got=picks.length;
+      if (got>0){
+        const muz=(c.octo && c.octo.userData.muzzles) || null;   // [입, 왼총구, 오른총구]
+        let fired=0;
+        for (let k=0;k<got;k++){
+          const tv=picks[k];
+          const anchor=muz ? muz[k % muz.length] : null;         // 발사구 순환(입→왼→오른)
+          if (spawnBullet(c.octo, c.color, tv, c, anchor)){       // 풀 여유 시에만 발사(고갈 시 중단)
+            c.bullets--; c.inflight++; fired++;
+          } else {
+            tv.reserved=false;   // 발사 실패(풀 고갈) → 임시 예약 해제, 다음 프레임 재시도
+            break;
+          }
+        }
+        // 발사 못 한 나머지 픽도 예약 해제(중단된 경우)
+        for (let k=fired;k<got;k++) picks[k].reserved=false;
+        if (fired>0){
           if (c.octo && c.octo.userData.pumpT < 0) c.octo.userData.pumpT = 0;  // 발사: 머리 부풂 펌프 시작(완료 후 재트리거)
           if (c.octo){
-            // 발사할 타겟이 문어 기준 오른쪽이면 오른쪽(+), 왼쪽이면 왼쪽(-)을 바라봄. 매 발사마다 갱신.
-            // dx에 직접 gain → 깊이(dz)에 묻히지 않고 좌/우 차이가 또렷하게 보임. 회전으로 타겟 x가 바뀌면 각도도 따라 변함.
-            c.octo.getWorldPosition(_v2); voxelWorld0(tv, _v3);
+            // 첫 타겟(입)을 기준으로 좌/우 미세 조준. dx에 gain → 좌/우 차이가 또렷.
+            c.octo.getWorldPosition(_v2); voxelWorld0(picks[0], _v3);
             const dx=_v3.x-_v2.x;
             c.octo.userData.aimYaw = Math.max(-0.4, Math.min(0.4, dx*0.14));   // ±~23° 범위로 클램프
           }
-          c.bullets--; c.inflight++;
           c.fireCooldown=interval;
           // 모든 총알 처리 완료(명중 or 환불) 후에만 fade — 환불 시 캐논 부활 보장
           if (c.bullets<=0 && c.inflight<=0) onCannonDepleted(c);
         } else {
-          c.fireCooldown=0.05;  // 풀 풀릴 때까지 짧게 대기
+          c.fireCooldown=0.05;  // 풀 고갈: 풀릴 때까지 짧게 대기(차감 X)
         }
       } else {
         c.fireCooldown=0.1; // 타겟 없음: 대기(차감 X)
@@ -6735,6 +6776,29 @@
       window.__dbgGoStage = (i) => loadStage(i);   // 스테이지 점프(검증용)
       // 옥토퍼스 조준 yaw 검증
       window.__dbgAim = () => slots.map((s,i)=> s&&s.octo ? {i, color:s.color, aimYaw:+(s.octo.userData.aimYaw||0).toFixed(3), rotYDelta:+(s.octo.rotation.y-(Math.PI+0.5)).toFixed(3)} : null);
+      // 멀티샷 검증: 슬롯의 3 발사구(입/왼총구/오른총구) 월드좌표 + 현재 활성 총알 수.
+      window.__dbgMuzzles = (slotIndex=0) => {
+        const c=slots[slotIndex]; if(!c||!c.octo||!c.octo.userData.muzzles) return null;
+        const o=c.octo; o.updateWorldMatrix(true,true);
+        const ow=new THREE.Vector3(); o.getWorldPosition(ow);
+        const muz=o.userData.muzzles;
+        const w=muz.map(a=>{ const v=new THREE.Vector3(); a.getWorldPosition(v); return [+v.x.toFixed(3),+v.y.toFixed(3),+v.z.toFixed(3)]; });
+        let active=0; for(const b of BULLET_POOL) if(b.active) active++;
+        return { color:c.color, octoWorld:[+ow.x.toFixed(3),+ow.y.toFixed(3),+ow.z.toFixed(3)],
+                 mouth:w[0], gunL:w[1], gunR:w[2], parentSame:muz.map(a=>a.parent===o), scale:+o.scale.x.toFixed(3), activeBullets:active };
+      };
+      // 검증용: 슬롯 옥토의 화면 좌표(CSS px)와 발사구·총알 위치를 NDC로 반환 → 스크린샷 크롭/검증.
+      window.__dbgOctoScreen = (slotIndex=0) => {
+        const c=slots[slotIndex]; if(!c||!c.octo) return null;
+        const o=c.octo; o.updateWorldMatrix(true,true);
+        const cr=glCanvas.getBoundingClientRect();
+        const toScreen=(v)=>{ const p=v.clone().project(viewCam); return [ (p.x*0.5+0.5)*cr.width+cr.left, (-p.y*0.5+0.5)*cr.height+cr.top ]; };
+        const wp=new THREE.Vector3(); o.getWorldPosition(wp);
+        const muz=o.userData.muzzles.map(a=>{ const v=new THREE.Vector3(); a.getWorldPosition(v); return toScreen(v); });
+        // 이 색의 활성 총알 화면좌표
+        const bul=[]; for(const b of BULLET_POOL){ if(b.active && b.group===c.color){ bul.push(toScreen(b.mesh.position)); } }
+        return { center:toScreen(wp), mouth:muz[0], gunL:muz[1], gunR:muz[2], bullets:bul, color:c.color };
+      };
       // 트레일 길이 검증: 활성 총알들의 리샘플 호 길이(span) 측정 — 속도 무관 고정인지 확인용
       window.__dbgTrail = () => {
         const out=[];
@@ -6768,6 +6832,7 @@
         const invariantOK={}; for (const g in voxByColor) invariantOK[g]= (bulletSum[g]||0)===voxByColor[g];
         return { meanDepthByColor, countByColor:cnt, queueOrderColors:order, invariantOK };
       };
+      window.__dbgState = () => ({ phase, voxels:activeVoxelCount });   // 검증용: 진행상태+남은 보셀
       window.__dbg = () => {
         const vc={}, bc={};
         for (const v of voxels) if (v.active) vc[v.group]=(vc[v.group]||0)+1;
