@@ -78,6 +78,7 @@
 
     <div class="grp">
       <h2>Actions</h2>
+      <button id="undo" class="warn" disabled>↩ Undo (Ctrl/⌘+Z)</button>
       <button id="applySel">Apply color to selected part</button>
       <button id="allTint">Set ALL to Tint</button>
       <button id="allFixed">Set ALL to Fixed (current color)</button>
@@ -3793,6 +3794,15 @@ let modelExtent = 1;
 let paintMode = 'fixed';    // 'fixed' | 'tint'
 let selectMode = 'part';    // 'part' | 'brush'
 
+// ---------- Undo ----------
+const undoStack = []; const UNDO_MAX = 50;
+function pushUndo(){ if(!vfix) return; undoStack.push({f:vfix.slice(), c:vcol.slice()}); if(undoStack.length>UNDO_MAX) undoStack.shift(); updateUndoBtn(); }
+function updateUndoBtn(){ const b=document.getElementById('undo'); if(b){ b.disabled = undoStack.length===0; b.textContent = '↩ Undo (Ctrl/⌘+Z)'+(undoStack.length?'  ·  '+undoStack.length:''); } }
+function doUndo(){ if(!vfix||!undoStack.length){ setStatus('No action to undo.'); return; }
+  const s=undoStack.pop(); vfix.set(s.f); vcol.set(s.c);
+  selectedComp=-1; if(selInfo) selInfo.textContent='No part selected';
+  refreshAllDisplay(); updateUndoBtn(); setStatus('Undid last action. ('+undoStack.length+' steps left)'); }
+
 // ---------- Color helpers ----------
 function hexToRgb01(hex){
   hex = hex.replace('#','');
@@ -4077,6 +4087,7 @@ cv.addEventListener('pointerdown', ev=>{
   pointerNDC(ev);
   if(selectMode==='brush'){
     painting=true;
+    pushUndo();
     const hit=raycastHit();
     if(hit) brushPaintAt(hit);
   } else {
@@ -4163,12 +4174,14 @@ segKEl.addEventListener('change', ()=>{
 // Apply current color to selected part
 document.getElementById('applySel').addEventListener('click', ()=>{
   if(selectedComp<0){ setStatus('Select a part first (click the model).'); return; }
+  pushUndo();
   applyToComponent(selectedComp);
   highlightComp(selectedComp);
   setStatus('Applied '+(paintMode==='fixed'?'fixed color':'tint')+' to part #'+selectedComp);
 });
 document.getElementById('allTint').addEventListener('click', ()=>{
   if(!vfix) return;
+  pushUndo();
   for(let i=0;i<vCount;i++){ vfix[i]=0; }
   selectedComp=-1; selInfo.textContent='No part selected';
   refreshAllDisplay();
@@ -4176,6 +4189,7 @@ document.getElementById('allTint').addEventListener('click', ()=>{
 });
 document.getElementById('allFixed').addEventListener('click', ()=>{
   if(!vfix) return;
+  pushUndo();
   const [r,g,b]=hexToRgb01(hexIn.value);
   for(let i=0;i<vCount;i++){ vfix[i]=1; vcol[i*3]=r; vcol[i*3+1]=g; vcol[i*3+2]=b; }
   refreshAllDisplay();
@@ -4185,6 +4199,8 @@ document.getElementById('deselect').addEventListener('click', ()=>{
   selectedComp=-1; selInfo.textContent='No part selected';
   refreshAllDisplay();
 });
+document.getElementById('undo').addEventListener('click', doUndo);
+window.addEventListener('keydown', e=>{ if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&(e.key==='z'||e.key==='Z')){ e.preventDefault(); doUndo(); } });
 
 // ---------- SAVE ----------
 document.getElementById('save').addEventListener('click', ()=>{
@@ -4223,6 +4239,7 @@ loadInput.addEventListener('change', ev=>{
       const data = JSON.parse(fr.result);
       if(!vfix){ setStatus('Load the model first.'); return; }
       if(data.vertexCount !== vCount){ setStatus('Vertex count mismatch ('+data.vertexCount+' vs '+vCount+').'); return; }
+      pushUndo();
       const bin = atob(data.rgba);
       for(let i=0;i<vCount;i++){
         const r=bin.charCodeAt(i*4)/255, g=bin.charCodeAt(i*4+1)/255, b=bin.charCodeAt(i*4+2)/255, a=bin.charCodeAt(i*4+3);
@@ -4241,6 +4258,7 @@ loadInput.addEventListener('change', ev=>{
 syncSwatches();
 brushVal.textContent = brushSz.value;
 segVal.textContent = segKEl.value;
+updateUndoBtn();
 brushRow.style.display='none';
 segRow.style.display='none'; // shown after load if welded
 resize();
