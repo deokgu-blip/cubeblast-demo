@@ -33,63 +33,76 @@
 <div id="wrap">
   <div id="stage">
     <canvas id="c"></canvas>
-    <div id="status">Loading model…</div>
+    <div id="status">모델 불러오는 중…</div>
   </div>
   <div id="panel">
-    <h1>Octo Paint</h1>
-    <p class="sub">Cube Blast — 3D color tool. parts: <b id="partCount">–</b></p>
+    <h1>옥토 페인트 🐙</h1>
+    <p class="sub">큐브블라스트 3D 색칠 툴 · 파트: <b id="partCount">–</b></p>
+
+    <div class="grp" style="background:#172029">
+      <h2>사용법</h2>
+      <div class="small" style="line-height:1.75;color:#aebccb">
+        ① 모델을 <b>클릭</b>해 파트 선택 (작은 부위는 <b>브러시</b>로)<br>
+        ② <b>칠할 색</b> 고르고 <b>모드</b> 선택<br>
+        ③ <b>선택한 파트에 색 적용</b> 클릭<br>
+        ④ <b>틴트 미리보기</b>로 인게임 색 확인<br>
+        ⑤ <b>저장</b> → 받은 파일을 디스코드로 보내면 게임 적용<br>
+        ↩ 실수하면 <b>되돌리기</b> (Ctrl/⌘+Z)<br>
+        🖱️ 빈 곳 드래그=회전 · 휠=확대축소
+      </div>
+    </div>
 
     <div class="grp">
-      <h2>Paint Color</h2>
+      <h2>① 칠할 색</h2>
       <div class="row">
         <input type="color" id="hex" value="#ffcc33">
         <div class="sw" id="swatch"></div>
-        <span class="small">used for Fixed paint</span>
+        <span class="small">고정색 칠하기에 사용</span>
       </div>
-      <label>Mode</label>
-      <label class="radio"><input type="radio" name="pmode" value="fixed" checked> Fixed color (baked, always this color)</label>
-      <label class="radio"><input type="radio" name="pmode" value="tint"> Tint (runtime cube color)</label>
+      <label>모드</label>
+      <label class="radio"><input type="radio" name="pmode" value="fixed" checked> 고정색 (항상 이 색 — 입술·총·받침처럼)</label>
+      <label class="radio"><input type="radio" name="pmode" value="tint"> 틴트 (게임에서 큐브 색으로 물듦)</label>
     </div>
 
     <div class="grp">
-      <h2>Selection</h2>
-      <label class="radio"><input type="radio" name="smode" value="part" checked> Part click (auto region)</label>
-      <label class="radio"><input type="radio" name="smode" value="brush"> Brush (paint surface region)</label>
+      <h2>② 선택 방식</h2>
+      <label class="radio"><input type="radio" name="smode" value="part" checked> 파트 클릭 (자동 영역 선택)</label>
+      <label class="radio"><input type="radio" name="smode" value="brush"> 브러시 (표면 직접 칠하기)</label>
       <div id="brushRow">
-        <label>Brush size: <span id="brushVal">12</span></label>
+        <label>브러시 크기: <span id="brushVal">12</span></label>
         <input type="range" id="brush" min="3" max="60" value="12">
       </div>
       <div id="segRow">
-        <label>Auto-part count: <span id="segVal">14</span></label>
+        <label>자동 파트 개수: <span id="segVal">14</span></label>
         <input type="range" id="segK" min="2" max="40" value="14">
-        <div class="small">More = smaller pieces. (model is welded, so parts are spatial)</div>
+        <div class="small">클수록 잘게 나뉨 (이 모델은 한 덩어리라 위치 기준 자동 분할)</div>
       </div>
-      <div class="pill" id="selInfo">No part selected</div>
+      <div class="pill" id="selInfo">선택된 파트 없음</div>
     </div>
 
     <div class="grp">
-      <h2>Tint Preview</h2>
+      <h2>③ 틴트 미리보기</h2>
       <div class="row">
         <input type="color" id="tintHex" value="#e23b3b">
         <div class="sw" id="tintSw"></div>
-        <span class="small">how tint looks in-game</span>
+        <span class="small">게임에서 틴트가 보이는 색</span>
       </div>
     </div>
 
     <div class="grp">
-      <h2>Actions</h2>
-      <button id="undo" class="warn" disabled>↩ Undo (Ctrl/⌘+Z)</button>
-      <button id="applySel">Apply color to selected part</button>
-      <button id="allTint">Set ALL to Tint</button>
-      <button id="allFixed">Set ALL to Fixed (current color)</button>
-      <button id="deselect">Deselect</button>
+      <h2>④ 동작</h2>
+      <button id="undo" class="warn" disabled>↩ 되돌리기 (Ctrl/⌘+Z)</button>
+      <button id="applySel">선택한 파트에 색 적용</button>
+      <button id="allTint">전체를 틴트로</button>
+      <button id="allFixed">전체를 고정색으로 (현재 색)</button>
+      <button id="deselect">선택 해제</button>
     </div>
 
     <div class="grp">
-      <h2>File</h2>
-      <button id="save" class="primary">SAVE octo_colors.json</button>
+      <h2>⑤ 저장 / 불러오기</h2>
+      <button id="save" class="primary">저장 (octo_colors.json)</button>
       <hr>
-      <label>Load previous save</label>
+      <label>이전 저장 불러오기</label>
       <input type="file" id="loadFile" accept=".json,application/json">
     </div>
   </div>
@@ -3797,11 +3810,11 @@ let selectMode = 'part';    // 'part' | 'brush'
 // ---------- Undo ----------
 const undoStack = []; const UNDO_MAX = 50;
 function pushUndo(){ if(!vfix) return; undoStack.push({f:vfix.slice(), c:vcol.slice()}); if(undoStack.length>UNDO_MAX) undoStack.shift(); updateUndoBtn(); }
-function updateUndoBtn(){ const b=document.getElementById('undo'); if(b){ b.disabled = undoStack.length===0; b.textContent = '↩ Undo (Ctrl/⌘+Z)'+(undoStack.length?'  ·  '+undoStack.length:''); } }
-function doUndo(){ if(!vfix||!undoStack.length){ setStatus('No action to undo.'); return; }
+function updateUndoBtn(){ const b=document.getElementById('undo'); if(b){ b.disabled = undoStack.length===0; b.textContent = '↩ 되돌리기 (Ctrl/⌘+Z)'+(undoStack.length?'  ·  '+undoStack.length:''); } }
+function doUndo(){ if(!vfix||!undoStack.length){ setStatus('되돌릴 작업이 없어요.'); return; }
   const s=undoStack.pop(); vfix.set(s.f); vcol.set(s.c);
-  selectedComp=-1; if(selInfo) selInfo.textContent='No part selected';
-  refreshAllDisplay(); updateUndoBtn(); setStatus('Undid last action. ('+undoStack.length+' steps left)'); }
+  selectedComp=-1; if(selInfo) selInfo.textContent='선택된 파트 없음';
+  refreshAllDisplay(); updateUndoBtn(); setStatus('한 단계 되돌렸어요. ('+undoStack.length+'단계 남음)'); }
 
 // ---------- Color helpers ----------
 function hexToRgb01(hex){
@@ -3965,9 +3978,9 @@ function onLoaded(gltf){
   updateCamera();
 
   const note = weldedSingle
-    ? 'Model is one welded mesh ('+connCount+' connected) — using AUTO parts. Use Brush for fine areas.'
-    : connCount+' connected parts. Click a part to select.';
-  setStatus('Loaded • verts: '+vCount+' • parts: '+compCount+'. '+note);
+    ? '이 모델은 한 덩어리라 위치 기준 자동 파트로 나눴어요. 작은 부위는 브러시로 칠하세요.'
+    : connCount+'개 파트. 파트를 클릭해 선택하세요.';
+  setStatus('불러옴 • 정점: '+vCount+' • 파트: '+compCount+'. '+note);
   // show auto-part slider only when welded & in part mode
   if(weldedSingle && selectMode==='part' && segRow) segRow.style.display='block';
   window.__OCTO = {compCount, vCount, connCount, weldedSingle, ready:true};
@@ -3984,7 +3997,7 @@ function applySegmentation(){
     comp = connComp; compCount = connCount;
   }
   selectedComp = -1;
-  if(selInfo) selInfo.textContent='No part selected';
+  if(selInfo) selInfo.textContent='선택된 파트 없음';
   const pc = document.getElementById('partCount'); if(pc) pc.textContent = compCount;
   if(colorAttr) refreshAllDisplay();
 }
@@ -4123,7 +4136,7 @@ cv.addEventListener('pointerup', ev=>{
       if(i>=0){
         selectedComp = comp[i];
         highlightComp(selectedComp);
-        selInfo.textContent = 'Selected part #'+selectedComp;
+        selInfo.textContent = '선택한 파트 #'+selectedComp;
       }
     }
   }
@@ -4168,24 +4181,24 @@ segKEl.addEventListener('input', ()=>{ segVal.textContent = segKEl.value; });
 segKEl.addEventListener('change', ()=>{
   segK = parseInt(segKEl.value,10);
   applySegmentation();
-  setStatus('Re-segmented into '+compCount+' auto parts.');
+  setStatus(compCount+'개 자동 파트로 다시 나눴어요.');
 });
 
 // Apply current color to selected part
 document.getElementById('applySel').addEventListener('click', ()=>{
-  if(selectedComp<0){ setStatus('Select a part first (click the model).'); return; }
+  if(selectedComp<0){ setStatus('먼저 모델을 클릭해 파트를 선택하세요.'); return; }
   pushUndo();
   applyToComponent(selectedComp);
   highlightComp(selectedComp);
-  setStatus('Applied '+(paintMode==='fixed'?'fixed color':'tint')+' to part #'+selectedComp);
+  setStatus('파트 #'+selectedComp+'에 '+(paintMode==='fixed'?'고정색':'틴트')+' 적용했어요.');
 });
 document.getElementById('allTint').addEventListener('click', ()=>{
   if(!vfix) return;
   pushUndo();
   for(let i=0;i<vCount;i++){ vfix[i]=0; }
-  selectedComp=-1; selInfo.textContent='No part selected';
+  selectedComp=-1; selInfo.textContent='선택된 파트 없음';
   refreshAllDisplay();
-  setStatus('All vertices set to TINT (runtime cube color).');
+  setStatus('전체를 틴트(게임에서 큐브 색)로 설정했어요.');
 });
 document.getElementById('allFixed').addEventListener('click', ()=>{
   if(!vfix) return;
@@ -4193,10 +4206,10 @@ document.getElementById('allFixed').addEventListener('click', ()=>{
   const [r,g,b]=hexToRgb01(hexIn.value);
   for(let i=0;i<vCount;i++){ vfix[i]=1; vcol[i*3]=r; vcol[i*3+1]=g; vcol[i*3+2]=b; }
   refreshAllDisplay();
-  setStatus('All vertices set to FIXED color '+hexIn.value);
+  setStatus('전체를 고정색('+hexIn.value+')으로 설정했어요.');
 });
 document.getElementById('deselect').addEventListener('click', ()=>{
-  selectedComp=-1; selInfo.textContent='No part selected';
+  selectedComp=-1; selInfo.textContent='선택된 파트 없음';
   refreshAllDisplay();
 });
 document.getElementById('undo').addEventListener('click', doUndo);
@@ -4204,7 +4217,7 @@ window.addEventListener('keydown', e=>{ if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&
 
 // ---------- SAVE ----------
 document.getElementById('save').addEventListener('click', ()=>{
-  if(!vfix){ setStatus('Nothing to save yet.'); return; }
+  if(!vfix){ setStatus('아직 저장할 게 없어요.'); return; }
   // Build RGBA Uint8: RGB = sRGB color (for fixed use stored color; for tint store a neutral white so runtime can multiply), A = fixed flag (255/0)
   const rgba = new Uint8Array(vCount*4);
   for(let i=0;i<vCount;i++){
@@ -4226,7 +4239,7 @@ document.getElementById('save').addEventListener('click', ()=>{
   a.href = URL.createObjectURL(blob);
   a.download = 'octo_colors.json';
   document.body.appendChild(a); a.click(); a.remove();
-  setStatus('Saved! Send octo_colors.json to Discord to apply it in-game.');
+  setStatus('저장됨! octo_colors.json 파일을 디스코드로 보내면 게임에 적용돼요.');
 });
 
 // ---------- LOAD prior JSON ----------
@@ -4237,8 +4250,8 @@ loadInput.addEventListener('change', ev=>{
   fr.onload = ()=>{
     try{
       const data = JSON.parse(fr.result);
-      if(!vfix){ setStatus('Load the model first.'); return; }
-      if(data.vertexCount !== vCount){ setStatus('Vertex count mismatch ('+data.vertexCount+' vs '+vCount+').'); return; }
+      if(!vfix){ setStatus('모델을 먼저 불러오세요.'); return; }
+      if(data.vertexCount !== vCount){ setStatus('정점 수가 안 맞아요 ('+data.vertexCount+' vs '+vCount+').'); return; }
       pushUndo();
       const bin = atob(data.rgba);
       for(let i=0;i<vCount;i++){
@@ -4246,10 +4259,10 @@ loadInput.addEventListener('change', ev=>{
         vfix[i] = a>=128 ? 1:0;
         if(vfix[i]){ vcol[i*3]=r; vcol[i*3+1]=g; vcol[i*3+2]=b; }
       }
-      selectedComp=-1; selInfo.textContent='No part selected';
+      selectedComp=-1; selInfo.textContent='선택된 파트 없음';
       refreshAllDisplay();
-      setStatus('Loaded octo_colors.json — continue editing.');
-    }catch(e){ setStatus('Load error: '+e.message); }
+      setStatus('octo_colors.json 불러옴 — 이어서 칠하세요.');
+    }catch(e){ setStatus('불러오기 오류: '+e.message); }
   };
   fr.readAsText(f);
 });
