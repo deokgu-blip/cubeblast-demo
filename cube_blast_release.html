@@ -5525,9 +5525,9 @@
   function firstEmptySlot(){ for (let i=0;i<SLOTS;i++) if (!slots[i]) return i; return -1; }
 
   // ===== octopus blasters (3D, camera-attached) =====
-  // scale: 큐보다 살짝만 큼. yOff: 슬롯 셀 안쪽 정렬.
-  // faceY=Math.PI+0.5(~208°): 슬롯 권총문어는 보드(위쪽)를 향해 발사하므로 등(뒷모습)이 플레이어를 향한다.
-  const OCTO = { dist:13, spread:0.68, xOff:0.10, yOff:-1.55, scale:0.54, faceY:Math.PI+0.5, tiltX:0.18 };
+  // scale: 큐보다 큼(슬롯 0.72 > 큐 0.58). yOff: 받침이 슬롯 정중앙에 앉도록 정렬.
+  // faceY=Math.PI(180°): 슬롯 권총문어 = 정확한 뒷모습(머리 뒤가 플레이어 정면). 런타임 aimYaw 스윙은 이 기준 주위.
+  const OCTO = { dist:13, spread:0.68, xOff:0.10, yOff:-1.40, scale:0.54, faceY:Math.PI, tiltX:0.18 };
   // 슬롯 줄(탭박스+문어) 전체 위치/간격 — 에디터 조절. x:+오른쪽, y:+위(px), gap:슬롯 간격(px).
   const SLOT_ROW = { x:0, y:43, gap:10 };
   let _slotRowDY = 0;   // SLOT_ROW.y(px)를 투영보정한 3D y 델타(문어가 탭박스 따라 상하 이동)
@@ -5574,7 +5574,91 @@
       }
     }
     _octoMat=new THREE.MeshStandardMaterial({ vertexColors:true, color:0xffffff, roughness:0.42, metalness:0.05 });
+    buildGunSubmesh();   // 발사 시 '총'만 스케일업할 별도 submesh(공유 지오 + 센트로이드 피벗) 준비
     octoSource=src; useOcto=true;
+  }
+  // ── 발사 반동: '총' 부분만 살짝 커졌다 복귀 ──────────────────────────────────────
+  // 모든 옥토가 base position 지오메트리를 공유하므로 position 정점을 건드리면 모두 변형된다.
+  // 그래서 '총'(어두운 고정색 정점) 삼각형만 추려 별도 인덱스 지오메트리(자기 position/normal/color 복사)로
+  // 추출해두고(=_octoGunGeo, 모든 옥토 공유), 옥토마다 [총-센트로이드에 둔 pivot → 그 안에 -센트로이드만큼
+  // 오프셋한 gun mesh]를 추가한다. 평상시엔 base의 총과 정확히 겹쳐(같은 깊이·같은 색) 무변화, 발사 순간엔
+  // pivot.scale 만 펄스 → 총이 센트로이드 기준으로 잠깐 부풀고 복귀(머리/몸은 base 그대로라 절대 안 커짐).
+  let _octoGunGeo=null;                  // 공유 gun 지오(이미 -센트로이드 정렬됨)
+  const _octoGunCentroid=new THREE.Vector3(0,0,0);
+  function buildGunSubmesh(){
+    if (_octoGunGeo || !_octoBaseGeo) return;
+    const base=_octoBaseGeo;
+    const pos=base.attributes.position, nrm=base.attributes.normal;
+    const idx=base.index ? base.index.array : null;
+    const n=pos.count;
+    // gun 정점 마스크: 고정색 + 어두운 회색(R≈G≈B, 30<v<110). 입/눈(노랑) 제외.
+    const isGun=new Uint8Array(n);
+    let gx=0,gy=0,gz=0,gc=0;
+    for (let i=0;i<n;i++){
+      if (!_octoFixed[i]) continue;
+      // _octoBakedLin 은 linear; sRGB 0~255 회색이면 R≈G≈B. linear 비교로도 회색은 세 채널이 거의 동일.
+      const r=_octoBakedLin[i*3], g=_octoBakedLin[i*3+1], b=_octoBakedLin[i*3+2];
+      const mx=Math.max(r,g,b), mn=Math.min(r,g,b);
+      // 회색(채널 편차 작음) + 너무 밝지 않음(흰색 몸통/하이라이트 배제) + 완전 검정(눈동자) 제외
+      if (mx-mn<0.04 && mx>0.01 && mx<0.30){
+        isGun[i]=1; gx+=pos.getX(i); gy+=pos.getY(i); gz+=pos.getZ(i); gc++;
+      }
+    }
+    if (gc<10){ _octoGunGeo=null; return; }   // 안전: 총 정점 인식 실패 시 펄스 비활성
+    _octoGunCentroid.set(gx/gc, gy/gc, gz/gc);
+    // gun 정점만 compact: 원래 정점 인덱스 → 새 인덱스. 좌표는 센트로이드 기준으로 미리 빼둠(pivot 회전·스케일이 깔끔).
+    const remap=new Int32Array(n).fill(-1);
+    const gp=[], gn=[], gcol=[], gidx=[];
+    for (let i=0;i<n;i++){
+      if (!isGun[i]) continue;
+      remap[i]=gp.length/3;
+      gp.push(pos.getX(i)-_octoGunCentroid.x, pos.getY(i)-_octoGunCentroid.y, pos.getZ(i)-_octoGunCentroid.z);
+      gn.push(nrm?nrm.getX(i):0, nrm?nrm.getY(i):0, nrm?nrm.getZ(i):1);
+      gcol.push(_octoBakedLin[i*3], _octoBakedLin[i*3+1], _octoBakedLin[i*3+2]);  // 총 고정색(그룹 무관)
+    }
+    if (idx){
+      for (let t=0;t<idx.length;t+=3){
+        const a=idx[t],b=idx[t+1],c=idx[t+2];
+        if (isGun[a]&&isGun[b]&&isGun[c]) gidx.push(remap[a],remap[b],remap[c]);
+      }
+    } else {
+      for (let t=0;t<n;t+=3){ if (isGun[t]&&isGun[t+1]&&isGun[t+2]) gidx.push(remap[t],remap[t+1],remap[t+2]); }
+    }
+    if (!gidx.length){ _octoGunGeo=null; return; }
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(gp,3));
+    g.setAttribute('normal',   new THREE.Float32BufferAttribute(gn,3));
+    g.setAttribute('color',    new THREE.Float32BufferAttribute(gcol,3));
+    g.setIndex(gidx);
+    g.computeBoundingSphere();
+    _octoGunGeo=g;
+  }
+  // 옥토에 gun-pivot 부착(있으면). pivot은 총 센트로이드에, mesh는 -센트로이드 오프셋(geo가 이미 빼둠 → mesh local=0).
+  function attachGunPivot(inst){
+    if (!_octoGunGeo || !_octoMat) return;
+    const pivot=new THREE.Object3D();
+    pivot.position.copy(_octoGunCentroid);
+    const m=new THREE.Mesh(_octoGunGeo, _octoMat);   // 공유 지오·머티(색은 정점에 베이크)
+    pivot.add(m);
+    inst.add(pivot);
+    inst.userData.gunPivot=pivot;
+    inst.userData.gunPulseT=-1;   // -1=비활성, 0~dur=펄스 진행
+  }
+  let OCTO_GUN_PULSE=0.22;   // 총 스케일업 최대치(1.0=22% 커짐). let: 에디터 조절
+  let OCTO_GUN_PULSE_DUR=0.16;
+  function octoGunPulseStep(octo, dt){
+    if (!octo) return;
+    const pivot=octo.userData.gunPivot; if (!pivot) return;
+    if (octo.userData.gunHold){ pivot.scale.setScalar(1+OCTO_GUN_PULSE); return; }  // 검증용 hold
+    let t=octo.userData.gunPulseT;
+    let s=1;
+    if (t>=0){
+      t+=dt;
+      if (t>=OCTO_GUN_PULSE_DUR){ t=-1; s=1; }
+      else s=1+Math.sin((t/OCTO_GUN_PULSE_DUR)*Math.PI)*OCTO_GUN_PULSE;  // 1→1+max→1 (반동·차징 느낌)
+      octo.userData.gunPulseT=t;
+    }
+    pivot.scale.setScalar(s);
   }
   // 그룹 색(틴트)이 입혀진 지오메트리 — position/normal/index 는 베이스 공유(메모리 절약), color 만 그룹별.
   function octoGeometryFor(group){
@@ -5658,6 +5742,7 @@
     inst.userData.morphMeshes=morphMeshes;
     inst.userData.pumpT=-1;                          // -1=비활성, 0~pumpDur=펌프 진행
     inst.userData.aimYaw=0;                          // 발사 방향(좌/우) 미세 조준 yaw 오프셋
+    attachGunPivot(inst);                            // 발사 시 '총'만 스케일업할 gun-pivot(슬롯 문어 전용)
     // 머즐 앵커: 머리 상단 중심에 강체로 묶인 자식 노드. 총알 origin이 항상 이 점에서 나옴 →
     // yaw 조준/틸트/deploy 슬라이드 등 모든 변환을 따라가 "항상 머리 중심에서 발사"가 보장됨.
     const muzzle=new THREE.Object3D();
@@ -5702,8 +5787,8 @@
   function updateOctoPuff(dt){
     const interval=GAME_CONFIG.FIRE_INTERVAL/(crisis?GAME_CONFIG.CRISIS_SPEED_MULT:1);
     const pumpDur=Math.min(0.2, Math.max(0.08, interval*0.85));  // 발사 간격보다 짧게 → 매 발사 풀 펌프 후 디폴트 복귀
-    for (let i=0;i<SLOTS;i++){ if (slots[i]) octoPuffStep(slots[i].octo, dt, pumpDur); }
-    if (extraCannon) octoPuffStep(extraCannon.octo, dt, pumpDur);
+    for (let i=0;i<SLOTS;i++){ if (slots[i]){ octoPuffStep(slots[i].octo, dt, pumpDur); octoGunPulseStep(slots[i].octo, dt); } }
+    if (extraCannon){ octoPuffStep(extraCannon.octo, dt, pumpDur); octoGunPulseStep(extraCannon.octo, dt); }
   }
   // 슬롯 5칸 프레임(다크 레드 라운드 패널) — 항상 표시
   let slotFramesBuilt=false;
@@ -5729,7 +5814,7 @@
   // ===== queue blasters (3D octopus, default/no-anim, quarter-back view) =====
   // cols=3: 컬럼 수를 줄여 한 컬럼이 깊게 쌓이도록 함(레퍼런스 매칭). colGap은 5→3 변경에 맞춰 가로 spread 유지를 위해 확대.
   // faceY=-0.611(-35°): 권총문어가 3/4 정면(레퍼런스 각도) — 얼굴·눈·앞 권총이 플레이어를 향하고 살짝 좌측향.
-  const QUEUE = { cols:3, rowsPer:2, colGap:0.82, rowGap:0.76, baseY:-1.92, dist:13, scale:0.50, faceY:-0.611, tiltX:0.18 };
+  const QUEUE = { cols:3, rowsPer:2, colGap:0.82, rowGap:0.76, baseY:-1.92, dist:13, scale:0.58, faceY:-0.611, tiltX:0.18 };
   const queueOctos=[];   // { octo, qi }
   function disposeQueueOcto(o){
     if (!o) return;
@@ -6274,6 +6359,7 @@
         for (let k=fired;k<got;k++) picks[k].reserved=false;
         if (fired>0){
           if (c.octo && c.octo.userData.pumpT < 0) c.octo.userData.pumpT = 0;  // 발사: 머리 부풂 펌프 시작(완료 후 재트리거)
+          if (c.octo && c.octo.userData.gunPivot && c.octo.userData.gunPulseT < 0) c.octo.userData.gunPulseT = 0;  // 발사: '총'만 반동 스케일업
           if (c.octo){
             // 첫 타겟(입)을 기준으로 좌/우 미세 조준. dx에 gain → 좌/우 차이가 또렷.
             c.octo.getWorldPosition(_v2); voxelWorld0(picks[0], _v3);
@@ -6774,8 +6860,17 @@
       // 강제 deploy: 모든 빈 슬롯에 큐의 첫 항목 deploy
       window.__dbgDeploy = () => { while(queueLength() && firstEmptySlot()>=0) deployFront(); };
       window.__dbgGoStage = (i) => loadStage(i);   // 스테이지 점프(검증용)
+      // 발사 총-펄스 강제 트리거(검증용): 슬롯 문어 gun-pivot 펄스를 최대치에 고정(hold=true) 또는 1회 펄스.
+      window.__dbgGunPulse = (slotIndex=0, hold=true) => {
+        const c=slots[slotIndex]; if(!c||!c.octo||!c.octo.userData.gunPivot) return null;
+        if (hold){ c.octo.userData.gunHold=true; c.octo.userData.gunPivot.scale.setScalar(1+OCTO_GUN_PULSE); }
+        else { c.octo.userData.gunHold=false; c.octo.userData.gunPulseT=0; }
+        return { scale:+c.octo.userData.gunPivot.scale.x.toFixed(3), max:1+OCTO_GUN_PULSE };
+      };
+      window.__dbgGunInfo = () => ({ hasGunGeo: !!_octoGunGeo, centroid: _octoGunGeo?[+_octoGunCentroid.x.toFixed(3),+_octoGunCentroid.y.toFixed(3),+_octoGunCentroid.z.toFixed(3)]:null,
+        gunTris: _octoGunGeo&&_octoGunGeo.index ? _octoGunGeo.index.count/3 : 0, pulseMax:OCTO_GUN_PULSE, pulseDur:OCTO_GUN_PULSE_DUR });
       // 옥토퍼스 조준 yaw 검증
-      window.__dbgAim = () => slots.map((s,i)=> s&&s.octo ? {i, color:s.color, aimYaw:+(s.octo.userData.aimYaw||0).toFixed(3), rotYDelta:+(s.octo.rotation.y-(Math.PI+0.5)).toFixed(3)} : null);
+      window.__dbgAim = () => slots.map((s,i)=> s&&s.octo ? {i, color:s.color, aimYaw:+(s.octo.userData.aimYaw||0).toFixed(3), rotYDelta:+(s.octo.rotation.y-OCTO.faceY).toFixed(3)} : null);
       // 멀티샷 검증: 슬롯의 3 발사구(입/왼총구/오른총구) 월드좌표 + 현재 활성 총알 수.
       window.__dbgMuzzles = (slotIndex=0) => {
         const c=slots[slotIndex]; if(!c||!c.octo||!c.octo.userData.muzzles) return null;
