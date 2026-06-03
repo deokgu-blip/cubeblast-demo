@@ -39,6 +39,12 @@
 
 /* preview mode: hide editor chrome */
 body.ed-previewing .ed-bar, body.ed-previewing .ed-panel, body.ed-previewing .ed-vpanel{ display:none; }
+/* 미리보기 중에만 보이는 '편집으로 돌아가기' 플로팅 버튼 */
+.ed-backbtn{ display:none; position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:100002;
+  padding:9px 16px; border:none; border-radius:11px; background:#ff5b5b; color:#fff; font-weight:800; font-size:14px;
+  cursor:pointer; box-shadow:0 3px 10px rgba(0,0,0,.4); }
+.ed-backbtn:active{ transform:translateX(-50%) translateY(2px); }
+body.ed-previewing .ed-backbtn{ display:block; }
 
 /* 2D 리소스 에디터 — 드래그/리사이즈/회전 기즈모 + 트리 + 드롭존 */
 .ed-ui-outline{ position:fixed; z-index:99998; border:2px dashed #ffd56a; box-shadow:0 0 0 1px #0008;

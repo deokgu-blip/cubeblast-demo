@@ -112,6 +112,10 @@
     const prevBtn=mkBtn('▶ 미리보기','에디터 UI 숨기고 플레이',()=>togglePreview()); window.__edPreviewBtn=prevBtn;
     document.body.appendChild(bar);
 
+    // 미리보기 중에도 항상 떠 있는 '편집으로 돌아가기' 버튼(상단 바가 숨겨지므로 별도 플로팅). 평소엔 CSS로 숨김.
+    const backBtn=el('button','ed-backbtn','■ 편집으로'); backBtn.title='에디터로 돌아가기 (Esc)';
+    backBtn.onclick=()=>togglePreview(); document.body.appendChild(backBtn); window.__edBackBtn=backBtn;
+
     const panel = el('div','ed-panel');
     SCHEMA.forEach(sec=>{
       panel.appendChild(el('div','ed-sec', sec.grp));
@@ -203,6 +207,7 @@
     const mb=window.__edModeBtns||{}; for(const k in mb) mb[k].classList.toggle('on', k===m);
   }
   window.addEventListener('keydown', e=>{
+    if (e.code==='Escape' && previewing){ e.preventDefault(); togglePreview(); return; }   // 미리보기 → Esc로 편집 복귀
     if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
     if ((e.metaKey||e.ctrlKey) && e.code==='KeyZ'){ e.preventDefault(); doUndo(); return; }
     if (e.code==='KeyQ'){ setMode('select'); if(tc) tc.detach(); sel=null; }
