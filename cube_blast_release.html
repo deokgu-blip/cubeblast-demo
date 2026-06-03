@@ -5700,11 +5700,54 @@
     _octoGeoCache[key]=g;
     return g;
   }
+  // ── flatOnly 테셀레이션(에디터와 BYTE-IDENTICAL) ──────────────────────────────
+  // 색칠 에디터가 로드 시 cheeks(2회)·mouth(1회)를 테셀레이션해 정밀 색칠을 가능하게 한다.
+  // 게임도 동일 알고리즘으로 동일 파트를 테셀레이션해야 정점별 색이 정확히 정렬된다(정점수+순서 동일).
+  // 삼각형→4분할(엣지 중점, 중점 공유=웰드). KHR_mesh_quantization 정점은 denorm(getX*factor) 후 평면 Float32 로.
+  // 결과 파트는 morph 를 잃는다(작은 악센트라 부풂 불필요 — body/black 은 quantized geo+inflate morph 유지).
+  // ⚠ 이 세 함수는 에디터(octo_paint.html)와 바이트 동일해야 함 — 수정 금지.
+  function denormFactor(attr){ if(!attr||!attr.normalized) return 1;
+    const a=attr.array; return (a instanceof Int16Array)?1/32767:(a instanceof Int8Array)?1/127:(a instanceof Uint16Array)?1/65535:(a instanceof Uint8Array)?1/255:1; }
+  function tessOnce(src){
+    const idx=src.index?src.index.array:null;
+    const pa=src.attributes.position, na=src.attributes.normal;
+    const dnp=denormFactor(pa), dnn=denormFactor(na);
+    const triN=idx?idx.length/3:pa.count/3, gi=(t,k)=> idx?idx[t*3+k]:(t*3+k), N0=pa.count;
+    const pos=[],nor=na?[]:null;
+    for(let i=0;i<N0;i++){ pos.push([pa.getX(i)*dnp,pa.getY(i)*dnp,pa.getZ(i)*dnp]); if(nor) nor.push([na.getX(i)*dnn,na.getY(i)*dnn,na.getZ(i)*dnn]); }
+    const cache=new Map();
+    function mid(a,b){ const k=a<b?a+'_'+b:b+'_'+a; let m=cache.get(k); if(m!==undefined)return m;
+      m=pos.length; pos.push([(pos[a][0]+pos[b][0])/2,(pos[a][1]+pos[b][1])/2,(pos[a][2]+pos[b][2])/2]);
+      if(nor){ let x=nor[a][0]+nor[b][0],y=nor[a][1]+nor[b][1],z=nor[a][2]+nor[b][2],l=Math.hypot(x,y,z)||1; nor.push([x/l,y/l,z/l]); }
+      cache.set(k,m); return m; }
+    const ni=[];
+    for(let t=0;t<triN;t++){ const a=gi(t,0),b=gi(t,1),c=gi(t,2),ab=mid(a,b),bc=mid(b,c),ca=mid(c,a);
+      ni.push(a,ab,ca, ab,b,bc, ca,bc,c, ab,bc,ca); }
+    const g=new THREE.BufferGeometry();
+    const P=new Float32Array(pos.length*3); for(let i=0;i<pos.length;i++){P[i*3]=pos[i][0];P[i*3+1]=pos[i][1];P[i*3+2]=pos[i][2];}
+    g.setAttribute('position',new THREE.BufferAttribute(P,3));
+    if(nor){ const NN=new Float32Array(nor.length*3); for(let i=0;i<nor.length;i++){NN[i*3]=nor[i][0];NN[i*3+1]=nor[i][1];NN[i*3+2]=nor[i][2];} g.setAttribute('normal',new THREE.BufferAttribute(NN,3)); }
+    g.setIndex(pos.length>65535?new THREE.Uint32BufferAttribute(ni,1):new THREE.Uint16BufferAttribute(ni,1));
+    return g;
+  }
+  function tessellateFlat(geo,iters){ let g=geo; for(let i=0;i<iters;i++) g=tessOnce(g); return g; }
+  const _OCTO_TESS={ cheeks:2, mouth:1 };   // 에디터 TESS 와 동일 — cheeks 2회, mouth 1회
   function ensureOcto(){
     if (octoReady) return;
     octoReady=true;
     const src = (typeof loadedModels!=='undefined' && loadedModels['model_octopus']) || null;
     if (!src){ octoSource=null; useOcto=false; return; }
+    // ⓐ cheeks/mouth 를 에디터와 동일 알고리즘으로 테셀레이션(공유 octoSource 에서 1회 — 모든 clone 이 공유).
+    //    반드시 정점색/파생지오 캐시(_octoDerivedGeo)보다 먼저: 색은 새 정점수로 빌드돼야 정렬이 맞는다.
+    //    body/black 은 그대로(quantized geo + inflate morph + puff 유지). 테셀된 파트는 morph 를 잃음(부풂 없음, 허용).
+    src.traverse(o=>{
+      if (!o.isMesh || !o.geometry) return;
+      const nm=o.material && o.material.name;
+      if (nm && _OCTO_TESS[nm] && !o.geometry.userData.__octoTess){
+        o.geometry=tessellateFlat(o.geometry, _OCTO_TESS[nm]);   // 평면 Float32 신규 지오(morph 없음)
+        o.geometry.userData.__octoTess=true;
+      }
+    });
     // GLB 씬을 원본 그대로 보존(머티리얼·모프 포함). 받침 바닥이 슬롯/큐에 앉도록 중앙정렬은 메시 지오에서 1회.
     src.traverse(o=>{
       if (o.isMesh && o.geometry && !o.geometry.userData.__octoCentered){
@@ -7061,6 +7104,14 @@
           if(o.geometry&&o.geometry.attributes.color){ const a=o.geometry.attributes.color;
             out.parts[nm]='#'+_h(a.getX(0))+_h(a.getY(0))+_h(a.getZ(0)); }
           else if(o.material&&o.material.color){ out.parts[nm]='baked#'+o.material.color.getHexString(); } } });
+        return out;
+      };
+      // 파트별 정점수 검증(테셀레이션 정합성): 슬롯 문어의 각 파트 position.count. cheeks/mouth 가 테셀된 수여야 함.
+      window.__dbgOctoVertexCounts = (slotIndex=0) => {
+        const c=slots[slotIndex]; if(!c||!c.octo) return null;
+        const out={};
+        c.octo.traverse(o=>{ if(o.isMesh){ const nm=(o.material&&o.material.name)||'?';
+          if(o.geometry&&o.geometry.attributes.position) out[nm]=o.geometry.attributes.position.count; } });
         return out;
       };
       // PER-VERTEX 적용 검증: window.OCTO_COLORS 가 파트별로 적용됐는지(인스턴스의 octoColorMode).

@@ -3701,7 +3701,7 @@
 const GLB_B64 = window.__OCTO_GLB_B64__;
 const PARTS = ['body','black','cheeks','mouth'];
 const DEFAULT_TINT = { body:true, black:false, cheeks:false, mouth:false }; // body follows cube color by default
-const TESS = {};  // 런타임 테셀레이션 비활성: 소스 GLB의 잘못된 정점(stray)이 bounds/raycast를 망가뜨려 모델이 사라짐. 원본 해상도 유지.
+const TESS = { cheeks:2, mouth:1 };  // 런타임 flatOnly 테셀레이션(denorm). 입·볼 정밀 색칠용. 게임도 동일 알고리즘 → 정점 순서 일치
 const TINT_PREVIEW = [0.22,0.30,0.46];  // 회청색(게임 큐브색 영역 미리보기) — linear
 
 let renderer, scene, camera, group=null, raycaster, ext=1;
@@ -3725,17 +3725,18 @@ function u8ToB64(u8){ let s=''; const CH=0x8000; for(let i=0;i<u8.length;i+=CH) 
 
 // flatOnly 테셀레이션: 삼각형을 4개로(엣지 중점). 중점은 엣지 위 → 모양 불변. 중점 공유(웰드, 인덱스).
 function tessOnce(src){
+  // flatOnly tessellation, denormalized (KHR_mesh_quantization). Drops morph (these small accent
+  // parts won't puff — negligible). IDENTICAL algorithm must run in-game for matching vertex order.
   const idx=src.index?src.index.array:null;
-  const pa=src.attributes.position, na=src.attributes.normal, mp=src.morphAttributes.position||null;
+  const pa=src.attributes.position, na=src.attributes.normal;
+  const dnp=denormFactor(pa), dnn=denormFactor(na);
   const triN=idx?idx.length/3:pa.count/3, gi=(t,k)=> idx?idx[t*3+k]:(t*3+k), N0=pa.count;
   const pos=[],nor=na?[]:null;
-  for(let i=0;i<N0;i++){ pos.push([pa.getX(i),pa.getY(i),pa.getZ(i)]); if(nor) nor.push([na.getX(i),na.getY(i),na.getZ(i)]); }
-  const mpos=mp?mp.map(ma=>{const a=[];for(let i=0;i<N0;i++)a.push([ma.getX(i),ma.getY(i),ma.getZ(i)]);return a;}):null;
+  for(let i=0;i<N0;i++){ pos.push([pa.getX(i)*dnp,pa.getY(i)*dnp,pa.getZ(i)*dnp]); if(nor) nor.push([na.getX(i)*dnn,na.getY(i)*dnn,na.getZ(i)*dnn]); }
   const cache=new Map();
   function mid(a,b){ const k=a<b?a+'_'+b:b+'_'+a; let m=cache.get(k); if(m!==undefined)return m;
     m=pos.length; pos.push([(pos[a][0]+pos[b][0])/2,(pos[a][1]+pos[b][1])/2,(pos[a][2]+pos[b][2])/2]);
     if(nor){ let x=nor[a][0]+nor[b][0],y=nor[a][1]+nor[b][1],z=nor[a][2]+nor[b][2],l=Math.hypot(x,y,z)||1; nor.push([x/l,y/l,z/l]); }
-    if(mpos) for(let t=0;t<mpos.length;t++) mpos[t].push([(mpos[t][a][0]+mpos[t][b][0])/2,(mpos[t][a][1]+mpos[t][b][1])/2,(mpos[t][a][2]+mpos[t][b][2])/2]);
     cache.set(k,m); return m; }
   const ni=[];
   for(let t=0;t<triN;t++){ const a=gi(t,0),b=gi(t,1),c=gi(t,2),ab=mid(a,b),bc=mid(b,c),ca=mid(c,a);
@@ -3744,7 +3745,6 @@ function tessOnce(src){
   const P=new Float32Array(pos.length*3); for(let i=0;i<pos.length;i++){P[i*3]=pos[i][0];P[i*3+1]=pos[i][1];P[i*3+2]=pos[i][2];}
   g.setAttribute('position',new THREE.BufferAttribute(P,3));
   if(nor){ const NN=new Float32Array(nor.length*3); for(let i=0;i<nor.length;i++){NN[i*3]=nor[i][0];NN[i*3+1]=nor[i][1];NN[i*3+2]=nor[i][2];} g.setAttribute('normal',new THREE.BufferAttribute(NN,3)); }
-  if(mpos){ g.morphAttributes.position=mpos.map(arr=>{const M=new Float32Array(arr.length*3);for(let i=0;i<arr.length;i++){M[i*3]=arr[i][0];M[i*3+1]=arr[i][1];M[i*3+2]=arr[i][2];}return new THREE.BufferAttribute(M,3);}); g.morphTargetsRelative=src.morphTargetsRelative; }
   g.setIndex(pos.length>65535?new THREE.Uint32BufferAttribute(ni,1):new THREE.Uint16BufferAttribute(ni,1));
   return g;
 }
