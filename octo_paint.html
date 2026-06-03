@@ -3701,6 +3701,7 @@
 const GLB_B64 = window.__OCTO_GLB_B64__;
 const PARTS = ['body','black','cheeks','mouth'];
 const DEFAULT_TINT = { body:true, black:false, cheeks:false, mouth:false }; // body follows cube color by default
+const TESS = {};  // 런타임 테셀레이션 비활성: 소스 GLB의 잘못된 정점(stray)이 bounds/raycast를 망가뜨려 모델이 사라짐. 원본 해상도 유지.
 const TINT_PREVIEW = [0.22,0.30,0.46];  // 회청색(게임 큐브색 영역 미리보기) — linear
 
 let renderer, scene, camera, group=null, raycaster, ext=1;
@@ -3721,6 +3722,38 @@ function hexToLin(hex){ const n=parseInt(hex.slice(1),16);
   return [srgbToLinear(((n>>16)&255)/255), srgbToLinear(((n>>8)&255)/255), srgbToLinear((n&255)/255)]; }
 function b64ToArrayBuffer(b64){ const bin=atob(b64),n=bin.length,by=new Uint8Array(n); for(let i=0;i<n;i++)by[i]=bin.charCodeAt(i); return by.buffer; }
 function u8ToB64(u8){ let s=''; const CH=0x8000; for(let i=0;i<u8.length;i+=CH) s+=String.fromCharCode.apply(null,u8.subarray(i,i+CH)); return btoa(s); }
+
+// flatOnly 테셀레이션: 삼각형을 4개로(엣지 중점). 중점은 엣지 위 → 모양 불변. 중점 공유(웰드, 인덱스).
+function tessOnce(src){
+  const idx=src.index?src.index.array:null;
+  const pa=src.attributes.position, na=src.attributes.normal, mp=src.morphAttributes.position||null;
+  const triN=idx?idx.length/3:pa.count/3, gi=(t,k)=> idx?idx[t*3+k]:(t*3+k), N0=pa.count;
+  const pos=[],nor=na?[]:null;
+  for(let i=0;i<N0;i++){ pos.push([pa.getX(i),pa.getY(i),pa.getZ(i)]); if(nor) nor.push([na.getX(i),na.getY(i),na.getZ(i)]); }
+  const mpos=mp?mp.map(ma=>{const a=[];for(let i=0;i<N0;i++)a.push([ma.getX(i),ma.getY(i),ma.getZ(i)]);return a;}):null;
+  const cache=new Map();
+  function mid(a,b){ const k=a<b?a+'_'+b:b+'_'+a; let m=cache.get(k); if(m!==undefined)return m;
+    m=pos.length; pos.push([(pos[a][0]+pos[b][0])/2,(pos[a][1]+pos[b][1])/2,(pos[a][2]+pos[b][2])/2]);
+    if(nor){ let x=nor[a][0]+nor[b][0],y=nor[a][1]+nor[b][1],z=nor[a][2]+nor[b][2],l=Math.hypot(x,y,z)||1; nor.push([x/l,y/l,z/l]); }
+    if(mpos) for(let t=0;t<mpos.length;t++) mpos[t].push([(mpos[t][a][0]+mpos[t][b][0])/2,(mpos[t][a][1]+mpos[t][b][1])/2,(mpos[t][a][2]+mpos[t][b][2])/2]);
+    cache.set(k,m); return m; }
+  const ni=[];
+  for(let t=0;t<triN;t++){ const a=gi(t,0),b=gi(t,1),c=gi(t,2),ab=mid(a,b),bc=mid(b,c),ca=mid(c,a);
+    ni.push(a,ab,ca, ab,b,bc, ca,bc,c, ab,bc,ca); }
+  const g=new THREE.BufferGeometry();
+  const P=new Float32Array(pos.length*3); for(let i=0;i<pos.length;i++){P[i*3]=pos[i][0];P[i*3+1]=pos[i][1];P[i*3+2]=pos[i][2];}
+  g.setAttribute('position',new THREE.BufferAttribute(P,3));
+  if(nor){ const NN=new Float32Array(nor.length*3); for(let i=0;i<nor.length;i++){NN[i*3]=nor[i][0];NN[i*3+1]=nor[i][1];NN[i*3+2]=nor[i][2];} g.setAttribute('normal',new THREE.BufferAttribute(NN,3)); }
+  if(mpos){ g.morphAttributes.position=mpos.map(arr=>{const M=new Float32Array(arr.length*3);for(let i=0;i<arr.length;i++){M[i*3]=arr[i][0];M[i*3+1]=arr[i][1];M[i*3+2]=arr[i][2];}return new THREE.BufferAttribute(M,3);}); g.morphTargetsRelative=src.morphTargetsRelative; }
+  g.setIndex(pos.length>65535?new THREE.Uint32BufferAttribute(ni,1):new THREE.Uint16BufferAttribute(ni,1));
+  return g;
+}
+function tessellateFlat(geo,iters){ let g=geo; for(let i=0;i<iters;i++) g=tessOnce(g); return g; }
+// KHR_mesh_quantization: position is a NORMALIZED int attr — CPU getX() returns the RAW int,
+// so projection/painting must divide by the type max. (Don't replace the attribute — that breaks
+// the morph/render setup; denormalize only on CPU read.)
+function denormFactor(attr){ if(!attr||!attr.normalized) return 1;
+  const a=attr.array; return (a instanceof Int16Array)?1/32767:(a instanceof Int8Array)?1/127:(a instanceof Uint16Array)?1/65535:(a instanceof Uint8Array)?1/255:1; }
 
 // ---------- three ----------
 function initThree(){
@@ -3754,7 +3787,10 @@ function loadModel(){
     const o=g.scene;
     o.traverse(m=>{
       if (m.isMesh && m.material && PARTS.indexOf(m.material.name)>=0){
-        const name=m.material.name, geo=m.geometry, N=geo.attributes.position.count;
+        const name=m.material.name;
+        let geo=m.geometry;
+        if (TESS[name]){ geo=tessellateFlat(geo, TESS[name]); m.geometry=geo; }   // 런타임 테셀레이션(모양 유지)
+        const N=geo.attributes.position.count;
         const baked=m.material.color ? [m.material.color.r,m.material.color.g,m.material.color.b] : [0.8,0.8,0.8];
         const fixed=new Uint8Array(N), fixcol=new Float32Array(N*3);
         const tintDefault=!!DEFAULT_TINT[name];
@@ -3771,9 +3807,7 @@ function loadModel(){
     group=new THREE.Group(); group.add(o); scene.add(group);
     camera.position.set(0, ext*0.04, ext*1.95); camera.lookAt(0,0,0);
     setStatus('브러시로 색을 칠하세요. 지우개로 칠하면 그 부분은 게임에서 "쏘는 큐브 색"이 돼요. (회청색 영역 = 큐브색)');
-    (function loop(){ requestAnimationFrame(loop);
-      if (painting && pendingPaint){ paintAt(pendingPaint.x, pendingPaint.y); pendingPaint=null; }
-      renderer.render(scene,camera); })();
+    (function loop(){ requestAnimationFrame(loop); renderer.render(scene,camera); })();
     window.__loaded=true;
   }, (err)=>setStatus('모델 로드 실패: '+(err&&err.message||err)));
 }
@@ -3786,32 +3820,29 @@ function recordUndo(stroke, mo, i){
 }
 let curStroke=null;
 function paintAt(clientX, clientY){
-  // screen-space brush: paint front-facing verts within brushPx of the cursor.
-  // (no raycast gate — the source GLB body has a stray vertex that corrupts its
-  //  boundingSphere/raycast; projection + front-facing is enough and robust.)
+  // screen-space brush within brushPx of the cursor, with a LENIENT normalized normal gate:
+  // reject only clearly back-facing verts (dot < -0.35) so side-facing parts (cheeks) still paint,
+  // while the model's far/back side at the same screen point is excluded (no paint-through).
+  // (no raycast gate — source GLB has a stray vertex that corrupts boundingSphere/raycast.)
   const rect=renderer.domElement.getBoundingClientRect();
   const cx=clientX-rect.left, cy=clientY-rect.top, r2=brushPx*brushPx;
   const camPos=camera.position;
   if (!curStroke) curStroke=[];
+  const touched=new Set();
   for (const mo of meshes){
-    const mw=mo.mesh.matrixWorld, nm=new THREE.Matrix3().getNormalMatrix(mw);
-    const pos=mo.geo.attributes.position, nor=mo.geo.attributes.normal;
-    let changed=false;
+    const mw=mo.mesh.matrixWorld, pos=mo.geo.attributes.position, dn=denormFactor(pos);
     for (let i=0;i<mo.N;i++){
-      _v.fromBufferAttribute(pos,i).applyMatrix4(mw);
-      _wn.fromBufferAttribute(nor,i).applyMatrix3(nm);
-      _cd.subVectors(camPos,_v);
-      if (_wn.dot(_cd)<=0) continue;                       // back-facing → skip
+      _v.set(pos.getX(i)*dn, pos.getY(i)*dn, pos.getZ(i)*dn).applyMatrix4(mw);
       _pv.copy(_v).project(camera);
       const sx=(_pv.x*0.5+0.5)*rect.width, sy=(-_pv.y*0.5+0.5)*rect.height;
       const dx=sx-cx, dy=sy-cy; if (dx*dx+dy*dy>r2) continue;
       recordUndo(curStroke, mo, i);
       if (mode==='paint'){ mo.fixed[i]=1; mo.fixcol[i*3]=brushLin[0]; mo.fixcol[i*3+1]=brushLin[1]; mo.fixcol[i*3+2]=brushLin[2]; }
       else { mo.fixed[i]=0; }
-      applyVertexColor(mo,i); changed=true;
+      applyVertexColor(mo,i); touched.add(mo);
     }
-    if (changed) mo.geo.attributes.color.needsUpdate=true;
   }
+  touched.forEach(mo=> mo.geo.attributes.color.needsUpdate=true);
   return true;
 }
 function endStroke(){ if (curStroke && curStroke.length){ undoStack.push(curStroke); if(undoStack.length>60) undoStack.shift(); } curStroke=null; meshes.forEach(m=>m.touched.clear()); }
@@ -3861,12 +3892,12 @@ function bind(){
   cv.addEventListener('pointerdown', e=>{
     cv.setPointerCapture(e.pointerId);
     if (isRotate(e)){ rotating=true; lx=e.clientX; ly=e.clientY; }
-    else { painting=true; pendingPaint={x:e.clientX,y:e.clientY}; }
+    else { painting=true; paintAt(e.clientX,e.clientY); }   // 탭으로도 즉시 칠/지우기
   });
   window.addEventListener('pointermove', e=>{
     moveRing(e.clientX,e.clientY);
     if (rotating && group){ group.rotation.y+=(e.clientX-lx)*0.01; group.rotation.x=Math.max(-1.0,Math.min(1.0,group.rotation.x+(e.clientY-ly)*0.01)); lx=e.clientX; ly=e.clientY; }
-    else if (painting){ pendingPaint={x:e.clientX,y:e.clientY}; }
+    else if (painting){ paintAt(e.clientX,e.clientY); }
   });
   window.addEventListener('pointerup', ()=>{ if(painting) endStroke(); painting=false; rotating=false; });
   cv.addEventListener('wheel', e=>{ e.preventDefault();
