@@ -5667,9 +5667,51 @@
   // 추출해두고(=_octoGunGeo, 모든 옥토 공유), 옥토마다 [총-센트로이드에 둔 pivot → 그 안에 -센트로이드만큼
   // 오프셋한 gun mesh]를 추가한다. 평상시엔 base의 총과 정확히 겹쳐(같은 깊이·같은 색) 무변화, 발사 순간엔
   // pivot.scale 만 펄스 → 총이 센트로이드 기준으로 잠깐 부풀고 복귀(머리/몸은 base 그대로라 절대 안 커짐).
-  let _octoGunGeo=null;                  // 공유 gun 지오(이미 -센트로이드 정렬됨)
+  let _octoGunGeo=null;                  // 공유 gun 지오(이미 -센트로이드 정렬됨) — (참고/디버그용 합본; 펄스는 L/R 분할 지오 사용)
   let _octoGunMask=null;                 // Uint8[n]: 1=총 정점(큐 무총 모델 빌드용으로 보존)
   const _octoGunCentroid=new THREE.Vector3(0,0,0);
+  // 좌/우 총을 따로 펄스시키기 위한 분할 지오: x<0=왼쪽 총(머즐0), x>=0=오른쪽 총(머즐1) — 옥토 로컬프레임 기준.
+  let _octoGunGeoL=null, _octoGunGeoR=null;
+  const _octoGunCentroidL=new THREE.Vector3(0,0,0), _octoGunCentroidR=new THREE.Vector3(0,0,0);
+  // 합본 gun 정점 마스크에서 L/R 삼각형을 만들 헬퍼: side=-1(왼)/+1(오), 정점 x부호로 분할.
+  function _buildGunSideGeo(base, isGun, side){
+    const pos=base.attributes.position, nrm=base.attributes.normal;
+    const idx=base.index ? base.index.array : null;
+    const n=pos.count;
+    // 이 side에 속하는 총 정점만 추림(x부호). 센트로이드는 이 side 정점들로 산출(피벗 = 해당 총 중심).
+    const sideMask=new Uint8Array(n);
+    let cx=0,cy=0,cz=0,cc=0;
+    for (let i=0;i<n;i++){
+      if (!isGun[i]) continue;
+      const x=pos.getX(i);
+      const onSide = side<0 ? (x<0) : (x>=0);
+      if (onSide){ sideMask[i]=1; cx+=x; cy+=pos.getY(i); cz+=pos.getZ(i); cc++; }
+    }
+    if (cc<6) return { geo:null, centroid:null, tris:0 };
+    const cen=new THREE.Vector3(cx/cc, cy/cc, cz/cc);
+    const remap=new Int32Array(n).fill(-1);
+    const gp=[], gn=[], gcol=[], gidx=[];
+    for (let i=0;i<n;i++){
+      if (!sideMask[i]) continue;
+      remap[i]=gp.length/3;
+      gp.push(pos.getX(i)-cen.x, pos.getY(i)-cen.y, pos.getZ(i)-cen.z);
+      gn.push(nrm?nrm.getX(i):0, nrm?nrm.getY(i):0, nrm?nrm.getZ(i):1);
+      gcol.push(_octoBakedLin[i*3], _octoBakedLin[i*3+1], _octoBakedLin[i*3+2]);
+    }
+    if (idx){
+      for (let t=0;t<idx.length;t+=3){ const a=idx[t],b=idx[t+1],c=idx[t+2];
+        if (sideMask[a]&&sideMask[b]&&sideMask[c]) gidx.push(remap[a],remap[b],remap[c]); }
+    } else {
+      for (let t=0;t<n;t+=3){ if (sideMask[t]&&sideMask[t+1]&&sideMask[t+2]) gidx.push(remap[t],remap[t+1],remap[t+2]); }
+    }
+    if (!gidx.length) return { geo:null, centroid:null, tris:0 };
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(gp,3));
+    g.setAttribute('normal',   new THREE.Float32BufferAttribute(gn,3));
+    g.setAttribute('color',    new THREE.Float32BufferAttribute(gcol,3));
+    g.setIndex(gidx); g.computeBoundingSphere();
+    return { geo:g, centroid:cen, tris:gidx.length/3 };
+  }
   function buildGunSubmesh(){
     if (_octoGunGeo || !_octoBaseGeo) return;
     const base=_octoBaseGeo;
@@ -5726,33 +5768,62 @@
     g.setIndex(gidx);
     g.computeBoundingSphere();
     _octoGunGeo=g;
+    // L/R 분할 지오 빌드(x부호). 한쪽이 비면 폴백으로 합본을 양쪽 모두에 사용(펄스는 동작하되 분리는 안 됨).
+    const L=_buildGunSideGeo(base, isGun, -1), R=_buildGunSideGeo(base, isGun, +1);
+    if (L.geo && R.geo){
+      _octoGunGeoL=L.geo; _octoGunCentroidL.copy(L.centroid);
+      _octoGunGeoR=R.geo; _octoGunCentroidR.copy(R.centroid);
+    } else {
+      _octoGunGeoL=g; _octoGunCentroidL.copy(_octoGunCentroid);
+      _octoGunGeoR=g; _octoGunCentroidR.copy(_octoGunCentroid);
+    }
   }
-  // 옥토에 gun-pivot 부착(있으면). pivot은 총 센트로이드에, mesh는 -센트로이드 오프셋(geo가 이미 빼둠 → mesh local=0).
+  // 옥토에 gun-pivot 부착(있으면). 좌/우 총을 따로 펄스시키기 위해 L/R 두 피벗을 단다.
+  //   각 pivot은 해당 총 센트로이드에, mesh는 -센트로이드 오프셋(geo가 이미 빼둠 → mesh local=0).
+  //   발사 중인 쪽만 펄스: muz idx 0=왼(gunPivotL/gunPulseL_T), 1=오른(gunPivotR/gunPulseR_T).
   function attachGunPivot(inst){
-    if (!_octoGunGeo || !_octoMat) return;
-    const pivot=new THREE.Object3D();
-    pivot.position.copy(_octoGunCentroid);
-    const m=new THREE.Mesh(_octoGunGeo, _octoMat);   // 공유 지오·머티(색은 정점에 베이크)
-    pivot.add(m);
-    inst.add(pivot);
-    inst.userData.gunPivot=pivot;
-    inst.userData.gunPulseT=-1;   // -1=비활성, 0~dur=펄스 진행
+    if (!_octoGunGeoL || !_octoGunGeoR || !_octoMat) return;
+    const pivotL=new THREE.Object3D(); pivotL.position.copy(_octoGunCentroidL);
+    pivotL.add(new THREE.Mesh(_octoGunGeoL, _octoMat));
+    inst.add(pivotL);
+    const pivotR=new THREE.Object3D(); pivotR.position.copy(_octoGunCentroidR);
+    pivotR.add(new THREE.Mesh(_octoGunGeoR, _octoMat));
+    inst.add(pivotR);
+    inst.userData.gunPivotL=pivotL;
+    inst.userData.gunPivotR=pivotR;
+    inst.userData.gunPulseL_T=-1;     // -1=비활성, 0~dur=왼쪽 총 펄스 진행
+    inst.userData.gunPulseR_T=-1;     // -1=비활성, 0~dur=오른쪽 총 펄스 진행
+    // 하위호환: 일부 디버그/외부 코드가 gunPivot/gunPulseT를 참조 → 왼쪽 피벗을 별칭으로 노출.
+    inst.userData.gunPivot=pivotL;
+    inst.userData.gunPulseT=-1;
+  }
+  // muzIdx(0=왼,1=오른)에 해당하는 쪽만 펄스 트리거.
+  function triggerGunPulse(octo, muzIdx){
+    if (!octo) return;
+    if (muzIdx===0){ if (octo.userData.gunPulseL_T===undefined || octo.userData.gunPulseL_T<0) octo.userData.gunPulseL_T=0; }
+    else           { if (octo.userData.gunPulseR_T===undefined || octo.userData.gunPulseR_T<0) octo.userData.gunPulseR_T=0; }
   }
   let OCTO_GUN_PULSE=0.22;   // 총 스케일업 최대치(1.0=22% 커짐). let: 에디터 조절
-  let OCTO_GUN_PULSE_DUR=0.16;
+  let OCTO_GUN_PULSE_DUR=0.12;   // 한 발 펄스 길이. 발 간격(GAP)보다 짧게 둬 '발사 중인 총만' 부풀고 반대편은 쉬게 함.
+  let OCTO_MULTISHOT_GAP=0.12;   // 멀티샷 순차 교차 발사 시 발과 발 사이 텀(0.08~0.12s). 펄스 길이 이상이면 한쪽 펄스 종료 후 반대쪽 시작 → 겹침 최소.
+  function _gunPulseScale(t){ return 1+Math.sin((t/OCTO_GUN_PULSE_DUR)*Math.PI)*OCTO_GUN_PULSE; }
   function octoGunPulseStep(octo, dt){
     if (!octo) return;
-    const pivot=octo.userData.gunPivot; if (!pivot) return;
-    if (octo.userData.gunHold){ pivot.scale.setScalar(1+OCTO_GUN_PULSE); return; }  // 검증용 hold
-    let t=octo.userData.gunPulseT;
-    let s=1;
-    if (t>=0){
-      t+=dt;
-      if (t>=OCTO_GUN_PULSE_DUR){ t=-1; s=1; }
-      else s=1+Math.sin((t/OCTO_GUN_PULSE_DUR)*Math.PI)*OCTO_GUN_PULSE;  // 1→1+max→1 (반동·차징 느낌)
-      octo.userData.gunPulseT=t;
+    const pL=octo.userData.gunPivotL, pR=octo.userData.gunPivotR;
+    if (!pL && !pR) return;
+    if (octo.userData.gunHold){ if(pL)pL.scale.setScalar(1+OCTO_GUN_PULSE); if(pR)pR.scale.setScalar(1+OCTO_GUN_PULSE); return; }  // 검증용 hold(양쪽)
+    // 왼쪽
+    if (pL){
+      let t=octo.userData.gunPulseL_T, s=1;
+      if (t>=0){ t+=dt; if (t>=OCTO_GUN_PULSE_DUR){ t=-1; s=1; } else s=_gunPulseScale(t); octo.userData.gunPulseL_T=t; }
+      pL.scale.setScalar(s);
     }
-    pivot.scale.setScalar(s);
+    // 오른쪽
+    if (pR){
+      let t=octo.userData.gunPulseR_T, s=1;
+      if (t>=0){ t+=dt; if (t>=OCTO_GUN_PULSE_DUR){ t=-1; s=1; } else s=_gunPulseScale(t); octo.userData.gunPulseR_T=t; }
+      pR.scale.setScalar(s);
+    }
   }
   // ── 발사 반동 미세 떨림(recoil tremor): 본체가 아주 잠깐 흔들림. gunPulse(총 스케일)와 별개로 위치 지터만. ──
   // 슬롯 문어만(큐는 X). recoilT 시작 시 base 위치를 캡처해 매 프레임 base+감쇠지터로 복원 → 드리프트 0.
@@ -5941,13 +6012,12 @@
     }
     const mm=octo.userData.morphMeshes;
     for (let i=0;i<mm.length;i++){ const inf=mm[i].morphTargetInfluences; if (inf && inf.length) inf[0]=infl; }
-    // 발사 방향(좌/우)을 제자리에서 미세하게 바라봄 — aimYaw로 yaw 보간(위치는 머즐 앵커가 고정).
-    // 회전 속도를 발사 간격(crisis 가속 포함)에 맞춰 빠르게 → 머리가 매 발사와 동기로 또렷이 목표를 향함
-    // (느린 보간이면 연사 시 머리가 다 못 돌아 총알 방향과 어긋나 "여기저기서 쏘는" 느낌이 남).
-    const wantY=OCTO.faceY + (octo.userData.aimYaw||0);
-    const interval=GAME_CONFIG.FIRE_INTERVAL/(crisis?GAME_CONFIG.CRISIS_SPEED_MULT:1);
-    const turnRate=3.0/Math.max(0.05, interval);   // 발사 간격 내 ~95% 수렴
-    octo.rotation.y += (wantY-octo.rotation.y) * Math.min(1, dt*turnRate);
+    // [DISABLED per user request] 발사 시 조준 회전(aim-rotation-on-fire) 비활성화 — 문어가 발사 때 좌/우로 yaw 회전하지 않음.
+    //   재활성화하려면 아래 블록의 주석을 해제. (aimYaw 자체는 tickCannon에서도 비활성 — 그쪽 주석도 함께 해제할 것)
+    // const wantY=OCTO.faceY + (octo.userData.aimYaw||0);
+    // const interval=GAME_CONFIG.FIRE_INTERVAL/(crisis?GAME_CONFIG.CRISIS_SPEED_MULT:1);
+    // const turnRate=3.0/Math.max(0.05, interval);   // 발사 간격 내 ~95% 수렴
+    // octo.rotation.y += (wantY-octo.rotation.y) * Math.min(1, dt*turnRate);
   }
   function updateOctoPuff(dt){
     const interval=GAME_CONFIG.FIRE_INTERVAL/(crisis?GAME_CONFIG.CRISIS_SPEED_MULT:1);
@@ -6540,44 +6610,53 @@
       return;
     }
     if (c.bullets<=0) return;
+    // ── 진행 중인 버스트(순차 교차 발사) 처리: 한 발씩 왼총→오른총→왼…, 각 발 사이 짧은 텀(OCTO_MULTISHOT_GAP). ──
+    //   같은 발사 이벤트의 탄들을 동시에 쏘지 않고 시간차로 흘려보낸다. '발사 중인 총'만 펄스(다른 총은 쉼).
+    if (c.burst && c.burst.length){
+      c.shotTimer-=dt;
+      while (c.burst.length && c.shotTimer<=0){
+        const tv=c.burst.shift();
+        const muz=(c.octo && c.octo.userData.muzzles) || null;   // [왼총구(0), 오른총구(1)]
+        const muzIdx = muz ? (c.burstMuz % muz.length) : 0;      // 좌/우 교차
+        const anchor = muz ? muz[muzIdx] : null;
+        if (spawnBullet(c.octo, c.color, tv, c, anchor)){
+          c.bullets--; c.inflight++;
+          if (c.octo){
+            if (c.octo.userData.pumpT < 0) c.octo.userData.pumpT = 0;        // 머리 부풂 펌프(발사마다)
+            triggerGunPulse(c.octo, muzIdx);                                  // 발사 중인 '그 총'만 펄스(반대편은 쉼)
+            triggerOctoRecoil(c.octo);                                        // 본체 미세 떨림(발사마다)
+            // [DISABLED per user request] 발사 시 좌/우 조준 yaw(aimYaw) 설정 비활성 — 문어가 발사 때 회전하지 않음.
+            //   재활성화하려면 octoPuffStep의 회전 보간 주석과 함께 아래 두 줄을 해제할 것.
+            // c.octo.getWorldPosition(_v2); voxelWorld0(tv, _v3);
+            // c.octo.userData.aimYaw = Math.max(-0.4, Math.min(0.4, (_v3.x-_v2.x)*0.14));
+          }
+          c.burstMuz++;                                          // 다음 발은 반대편 총에서
+          c.shotTimer += OCTO_MULTISHOT_GAP;                     // 다음 발까지 짧은 텀
+        } else {
+          tv.reserved=false;                                     // 풀 고갈: 예약 해제, 남은 버스트도 환불 후 잠시 대기
+          while (c.burst.length) c.burst.shift().reserved=false;
+          c.fireCooldown=0.05;
+          break;
+        }
+      }
+      if (c.burst.length===0){
+        c.fireCooldown=interval;                                 // 버스트 종료 → 다음 사이클 대기
+        if (c.bullets<=0 && c.inflight<=0) onCannonDepleted(c);  // 모든 탄 처리 완료 시에만 fade
+      }
+      return;
+    }
     c.fireCooldown-=dt;
     if (c.fireCooldown<=0){
-      // 멀티샷: 양손 권총 총구 2곳에서 같은 색 타겟 최대 2개를 동시 발사(입에서는 발사 안 함).
+      // 멀티샷: 양손 권총 총구 2곳에서 같은 색 타겟 최대 2개. 단 동시 발사가 아니라 '순차 교차' 버스트로 흘린다.
       // 남은 탄/가시 타겟이 2개 미만이면 있는 만큼만. pickTargets가 임시 예약하며 중복 없이 뽑는다.
       const wantN=Math.min(2, c.bullets);
-      const picks=pickTargets(c.color, wantN);   // 스크래치(_multiPicks) — 즉시 소비
+      const picks=pickTargets(c.color, wantN);   // 스크래치(_multiPicks) — 즉시 복사해 버스트로 보관
       const got=picks.length;
       if (got>0){
-        const muz=(c.octo && c.octo.userData.muzzles) || null;   // [왼총구, 오른총구]
-        let fired=0;
-        for (let k=0;k<got;k++){
-          const tv=picks[k];
-          const anchor=muz ? muz[k % muz.length] : null;         // 발사구 순환(왼→오른)
-          if (spawnBullet(c.octo, c.color, tv, c, anchor)){       // 풀 여유 시에만 발사(고갈 시 중단)
-            c.bullets--; c.inflight++; fired++;
-          } else {
-            tv.reserved=false;   // 발사 실패(풀 고갈) → 임시 예약 해제, 다음 프레임 재시도
-            break;
-          }
-        }
-        // 발사 못 한 나머지 픽도 예약 해제(중단된 경우)
-        for (let k=fired;k<got;k++) picks[k].reserved=false;
-        if (fired>0){
-          if (c.octo && c.octo.userData.pumpT < 0) c.octo.userData.pumpT = 0;  // 발사: 머리 부풂 펌프 시작(완료 후 재트리거)
-          if (c.octo && c.octo.userData.gunPivot && c.octo.userData.gunPulseT < 0) c.octo.userData.gunPulseT = 0;  // 발사: '총'만 반동 스케일업
-          if (c.octo) triggerOctoRecoil(c.octo);  // 발사: 본체 미세 떨림(recoil tremor) — 슬롯 문어만
-          if (c.octo){
-            // 첫 타겟(입)을 기준으로 좌/우 미세 조준. dx에 gain → 좌/우 차이가 또렷.
-            c.octo.getWorldPosition(_v2); voxelWorld0(picks[0], _v3);
-            const dx=_v3.x-_v2.x;
-            c.octo.userData.aimYaw = Math.max(-0.4, Math.min(0.4, dx*0.14));   // ±~23° 범위로 클램프
-          }
-          c.fireCooldown=interval;
-          // 모든 총알 처리 완료(명중 or 환불) 후에만 fade — 환불 시 캐논 부활 보장
-          if (c.bullets<=0 && c.inflight<=0) onCannonDepleted(c);
-        } else {
-          c.fireCooldown=0.05;  // 풀 고갈: 풀릴 때까지 짧게 대기(차감 X)
-        }
+        // 버스트 큐로 복사(스크래치 _multiPicks 재사용 방지). 다음 틱부터 한 발씩 교차 발사.
+        c.burst = picks.slice(0, got);
+        if (c.burstMuz===undefined) c.burstMuz=0;   // 이벤트 간에도 선두 총이 교차되도록 유지(리셋 안 함)
+        c.shotTimer=0;                              // 첫 발은 즉시
       } else {
         c.fireCooldown=0.1; // 타겟 없음: 대기(차감 X)
       }
@@ -6592,6 +6671,8 @@
   // 옥토퍼스 소멸 애니메이션: 살짝 부풀고(×1.08) 바로 작아지며 사라짐. 파티클 없음(과한 이펙트 회피).
   function onCannonDepleted(c){
     if (c.fadeT!==undefined) return;       // 중복 트리거 방지
+    // 진행 중 버스트(순차 교차 발사)의 미발사 예약 타겟 환불 — 페이드 중엔 tickCannon이 정지하므로 누수 방지.
+    if (c.burst && c.burst.length){ while (c.burst.length) c.burst.shift().reserved=false; }
     c.fadeT=0;
     c.fadeDur=0.15;                        // 더 빠른 소멸(0.28→0.15)
     c.fadeStartScale = c.octo ? c.octo.scale.x : OCTO.scale;
@@ -6985,13 +7066,14 @@
     const m=new THREE.Mesh(geo,mat); m.position.set(tx, ty+h, tz); m.scale.setScalar(0.82); mkScene.add(m);
     mkProj.push({mesh:m, t:0, x:tx, z:tz, y0:ty+h, y1:ty});
   }
-  // easeOutBack: 목표를 살짝 지나쳤다 되돌아오는 탄성(자석 착 붙는 팝). s=오버슈트 강도.
+  // [DISABLED per user request] easeOutBack(오버슈트) — 블록이 목표를 살짝 지나쳤다 되돌아오는 탄성. 오버슈트가 "틀린 느낌"이라 비활성.
+  //   대신 mkStepDrops에서 easeOutCubic(오버슈트 없음)을 사용해 정확한 최종 좌표까지 직선 낙하 후 정지. 재활성화 시 아래 함수를 사용처에 다시 연결.
   function _easeOutBack(k){ const s=1.7; const u=k-1; return 1 + (s+1)*u*u*u + s*u*u; }
   function mkStepDrops(dt){
     let landed=false;
     for(let i=mkProj.length-1;i>=0;i--){ const p=mkProj[i]; p.t+=dt; const k=p.t/MK_DROP_DUR;
       if(k>=1){ mkScene.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh.material.dispose(); mkProj.splice(i,1); mkReveal(); landed=true; haptic('selection'); continue; }
-      const e=_easeOutBack(k);                                          // 빠른 ease-out + 살짝 오버슈트 → '딱' 붙는 자석감
+      const e=1-Math.pow(1-k,3);                                        // easeOutCubic: 오버슈트 없이 정확한 최종 좌표까지 직선 낙하 후 정지(흔들림 X)
       p.mesh.position.set(p.x, p.y0+(p.y1-p.y0)*e, p.z);
       const s=0.82 + 0.18*Math.min(1,e);                                // 작게 시작→정사이즈로 팝(붙는 순간 또렷)
       p.mesh.scale.setScalar(s);
@@ -7034,7 +7116,11 @@
   window.addEventListener('resize', ()=>{ if(mkActive) mkResize(); });
   // 검증용(?mktest): 제작화면 강제 오픈 — 배포에선 URL 파라미터 없으면 비활성
   if(/[?&]mktest/.test(location.search)){ window.__mkTest=(n)=>{ phase='making'; mkOpen(n||40, (action)=>{ if(action==='home'){ goHome(); } else { phase='playing'; } }); return {di:META.di, filled:META.filled, total:(DIORAMA_SEQ[META.di]||{}).n, cubesPerClear:cubesPerClearFor(META.di), stages:stagesForDiorama(META.di), seqLen:DIORAMA_SEQ.length}; }; window.__mkState=()=>({di:META.di,filled:META.filled,coins:META.coins,seq:DIORAMA_SEQ.map(s=>s.name+':'+s.n)});
-    window.__mkFill=(frac)=>{ const f=Math.max(0,Math.min(1,frac==null?1:frac)); META.filled=Math.round(mkCurTotal*f); if(mkMesh){ mkMesh.count=Math.min(META.filled,mkCurTotal); } mkUpdateBar(); return {filled:META.filled,total:mkCurTotal}; }; window.__overTest=()=>showGameOver(); window.__overState=()=>({q:queueLength(), slots:slots.filter(Boolean).length, coin:coinBalance}); window.__deploy=(c,r)=>deployFromQueueColRow(c,r); }
+    window.__mkFill=(frac)=>{ const f=Math.max(0,Math.min(1,frac==null?1:frac)); META.filled=Math.round(mkCurTotal*f); if(mkMesh){ mkMesh.count=Math.min(META.filled,mkCurTotal); } mkUpdateBar(); return {filled:META.filled,total:mkCurTotal}; }; window.__overTest=()=>showGameOver(); window.__overState=()=>({q:queueLength(), slots:slots.filter(Boolean).length, coin:coinBalance}); window.__deploy=(c,r)=>deployFromQueueColRow(c,r);
+    // 낙하 블록 상태(오버슈트 검증): 각 in-flight 블록의 현재 y, 목표 y1, 시작 y0, x/z(횡드리프트 확인), 진행 t.
+    window.__mkProj=()=> (typeof mkProj!=='undefined'?mkProj:[]).map(p=>({ t:+p.t.toFixed(3), y:+p.mesh.position.y.toFixed(4), y0:+p.y0.toFixed(4), y1:+p.y1.toFixed(4),
+      below: p.mesh.position.y < p.y1 - 1e-4,   // 목표보다 아래로 내려갔으면(오버슈트) true
+      x:+p.mesh.position.x.toFixed(4), tx:+p.x.toFixed(4), z:+p.mesh.position.z.toFixed(4), tz:+p.z.toFixed(4) })); }
 
   function loadStage(idx){
     stageIndex=idx % STAGES.length;
@@ -7085,11 +7171,21 @@
       window.__dbgGoStage = (i) => loadStage(i);   // 스테이지 점프(검증용)
       // 발사 총-펄스 강제 트리거(검증용): 슬롯 문어 gun-pivot 펄스를 최대치에 고정(hold=true) 또는 1회 펄스.
       window.__dbgGunPulse = (slotIndex=0, hold=true) => {
-        const c=slots[slotIndex]; if(!c||!c.octo||!c.octo.userData.gunPivot) return null;
-        if (hold){ c.octo.userData.gunHold=true; c.octo.userData.gunPivot.scale.setScalar(1+OCTO_GUN_PULSE); }
-        else { c.octo.userData.gunHold=false; c.octo.userData.gunPulseT=0; }
-        return { scale:+c.octo.userData.gunPivot.scale.x.toFixed(3), max:1+OCTO_GUN_PULSE };
+        const c=slots[slotIndex]; if(!c||!c.octo||!c.octo.userData.gunPivotL) return null;
+        const o=c.octo;
+        if (hold){ o.userData.gunHold=true; o.userData.gunPivotL.scale.setScalar(1+OCTO_GUN_PULSE); if(o.userData.gunPivotR) o.userData.gunPivotR.scale.setScalar(1+OCTO_GUN_PULSE); }
+        else { o.userData.gunHold=false; o.userData.gunPulseL_T=0; o.userData.gunPulseR_T=0; }
+        return { scaleL:+o.userData.gunPivotL.scale.x.toFixed(3), scaleR:o.userData.gunPivotR?+o.userData.gunPivotR.scale.x.toFixed(3):null, max:1+OCTO_GUN_PULSE };
       };
+      // 좌/우 분리 펄스 검증: 한쪽만 1회 펄스 트리거.
+      window.__dbgGunPulseSide = (slotIndex=0, side=0) => {
+        const c=slots[slotIndex]; if(!c||!c.octo||!c.octo.userData.gunPivotL) return null;
+        c.octo.userData.gunHold=false; triggerGunPulse(c.octo, side|0);
+        return { side:side|0, lT:+(c.octo.userData.gunPulseL_T||0).toFixed(3), rT:+(c.octo.userData.gunPulseR_T||0).toFixed(3) };
+      };
+      // 좌/우 총 피벗의 현재 스케일(분리 동작 확인용)
+      window.__dbgGunScales = () => slots.map((s,i)=> s&&s.octo&&s.octo.userData.gunPivotL ? {
+        i, L:+s.octo.userData.gunPivotL.scale.x.toFixed(4), R:s.octo.userData.gunPivotR?+s.octo.userData.gunPivotR.scale.x.toFixed(4):null } : null);
       // 발사 반동 떨림 검증: 슬롯 문어들의 recoilT 상태 + 현재 위치 오프셋(base 대비) 반환.
       window.__dbgRecoil = () => slots.map((s,i)=> s&&s.octo ? {
         i, recoilT:+(s.octo.userData.recoilT!==undefined?s.octo.userData.recoilT:-1).toFixed(3),
@@ -7099,7 +7195,13 @@
       // 강제 떨림 트리거(검증용)
       window.__dbgTriggerRecoil = () => { for (let i=0;i<SLOTS;i++){ if(slots[i]&&slots[i].octo) triggerOctoRecoil(slots[i].octo); } return 'ok'; };
       window.__dbgGunInfo = () => ({ hasGunGeo: !!_octoGunGeo, centroid: _octoGunGeo?[+_octoGunCentroid.x.toFixed(3),+_octoGunCentroid.y.toFixed(3),+_octoGunCentroid.z.toFixed(3)]:null,
-        gunTris: _octoGunGeo&&_octoGunGeo.index ? _octoGunGeo.index.count/3 : 0, pulseMax:OCTO_GUN_PULSE, pulseDur:OCTO_GUN_PULSE_DUR });
+        gunTris: _octoGunGeo&&_octoGunGeo.index ? _octoGunGeo.index.count/3 : 0,
+        split: !!(_octoGunGeoL&&_octoGunGeoR&&_octoGunGeoL!==_octoGunGeo),
+        centroidL: _octoGunGeoL?[+_octoGunCentroidL.x.toFixed(3),+_octoGunCentroidL.y.toFixed(3),+_octoGunCentroidL.z.toFixed(3)]:null,
+        centroidR: _octoGunGeoR?[+_octoGunCentroidR.x.toFixed(3),+_octoGunCentroidR.y.toFixed(3),+_octoGunCentroidR.z.toFixed(3)]:null,
+        trisL: _octoGunGeoL&&_octoGunGeoL.index ? _octoGunGeoL.index.count/3 : 0,
+        trisR: _octoGunGeoR&&_octoGunGeoR.index ? _octoGunGeoR.index.count/3 : 0,
+        pulseMax:OCTO_GUN_PULSE, pulseDur:OCTO_GUN_PULSE_DUR });
       // 옥토퍼스 조준 yaw 검증
       window.__dbgAim = () => slots.map((s,i)=> s&&s.octo ? {i, color:s.color, aimYaw:+(s.octo.userData.aimYaw||0).toFixed(3), rotYDelta:+(s.octo.rotation.y-OCTO.faceY).toFixed(3)} : null);
       // 회전 슬롯 침범 검증: Y회전 전 구간에서 모델 바닥 최저 화면Y vs 슬롯 octo 머리 최상단 화면Y.
@@ -7348,21 +7450,23 @@
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
   glCanvas.addEventListener('touchmove', e=>{ e.preventDefault(); }, { passive:false });
-  glCanvas.addEventListener('wheel', e=>{
-    e.preventDefault();
-    camDist=Math.max(GAME_CONFIG.ZOOM_MIN, Math.min(GAME_CONFIG.ZOOM_MAX, camDist+e.deltaY*0.02));
-    applyCamera();
-  }, { passive:false });
+  // [DISABLED per user request] 모델 휠 줌(wheel-zoom) 비활성화 — 휠로 camDist 변경 금지. 재활성화 시 아래 블록 주석 해제.
+  // glCanvas.addEventListener('wheel', e=>{
+  //   e.preventDefault();
+  //   camDist=Math.max(GAME_CONFIG.ZOOM_MIN, Math.min(GAME_CONFIG.ZOOM_MAX, camDist+e.deltaY*0.02));
+  //   applyCamera();
+  // }, { passive:false });
+  // [DISABLED per user request] 핀치 줌(pinch-zoom) 비활성화 — 두 손가락 핀치로 모델 camDist 변경 금지. 재활성화 시 아래 블록 주석 해제.
   // pinch zoom
-  let pinchStart=0, pinchDist0=0;
-  glCanvas.addEventListener('touchstart', e=>{
-    if (e.touches.length===2){ pinchDist0=touchDist(e); pinchStart=camDist; player.dragging=false; }
-  }, { passive:false });
-  glCanvas.addEventListener('touchmove', e=>{
-    if (e.touches.length===2){ const d=touchDist(e); if (pinchDist0>0){
-      camDist=Math.max(GAME_CONFIG.ZOOM_MIN, Math.min(GAME_CONFIG.ZOOM_MAX, pinchStart*(pinchDist0/d))); applyCamera(); } }
-  }, { passive:false });
-  function touchDist(e){ const a=e.touches[0],b=e.touches[1]; return Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY); }
+  // let pinchStart=0, pinchDist0=0;
+  // glCanvas.addEventListener('touchstart', e=>{
+  //   if (e.touches.length===2){ pinchDist0=touchDist(e); pinchStart=camDist; player.dragging=false; }
+  // }, { passive:false });
+  // glCanvas.addEventListener('touchmove', e=>{
+  //   if (e.touches.length===2){ const d=touchDist(e); if (pinchDist0>0){
+  //     camDist=Math.max(GAME_CONFIG.ZOOM_MIN, Math.min(GAME_CONFIG.ZOOM_MAX, pinchStart*(pinchDist0/d))); applyCamera(); } }
+  // }, { passive:false });
+  // function touchDist(e){ const a=e.touches[0],b=e.touches[1]; return Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY); }
 
   document.addEventListener('keydown', e=>{
     if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
