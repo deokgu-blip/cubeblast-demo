@@ -4358,7 +4358,7 @@
     CRISIS_CANNON_THRESHOLD: 5,
     CRISIS_SPEED_MULT: 2,
     ACTIVE_SLOTS: 5,
-    VOXEL_SIZE: 1.0,
+    VOXEL_SIZE: 1.15,
     CAMERA_FOV: 38,
     CAMERA_DISTANCE: 26,
     ZOOM_MIN: 16,
@@ -4418,7 +4418,7 @@
     CRISIS_CANNON_THRESHOLD:{ label: '위기 모드 진입 대포 수', min: 1, max: 12, step: 1 },
     CRISIS_SPEED_MULT:     { label: '위기 모드 배속', min: 1, max: 4, step: 0.5 },
     ACTIVE_SLOTS:          { label: '활성 슬롯 수', min: 3, max: 7, step: 1 },
-    VOXEL_SIZE:            { label: '보셀 크기(0~1)', min: 0.6, max: 1, step: 0.02 },
+    VOXEL_SIZE:            { label: '보셀 크기(겹침)', min: 0.6, max: 1.4, step: 0.02 },
     CAMERA_FOV:            { label: '카메라 FOV', min: 25, max: 60, step: 1 },
     CAMERA_DISTANCE:       { label: '카메라 기본 거리', min: 12, max: 48, step: 1 },
     ZOOM_MIN:              { label: '최소 줌 거리', min: 8, max: 30, step: 1 },
@@ -4970,7 +4970,7 @@
 
   // ===== voxel runtime =====
   const VS = GAME_CONFIG.VOXEL_SIZE;
-  const voxelGeo = new THREE.BoxGeometry(VS, VS, VS);
+  const voxelGeo = new THREE.BoxGeometry(1, 1, 1);   // 단위 큐브(폴백). 겹침은 인스턴스 scale=VOXEL_SIZE 로만 적용(이중 적용 방지)
   function makeVoxelTexture(){
     // 비비드 색감 유지: 텍스처는 거의 순백색으로(베이스 컬러를 그대로 살림),
     // 가장자리에만 미세한 그늘로 큐브 경계 분리. 라이팅(specular)이 광택을 만듦.
