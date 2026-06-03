@@ -30,7 +30,9 @@
   /* ===== 홈 탭: 레벨 길 ===== */
   .view{position:absolute;left:0;right:0;top:80px;bottom:78px;z-index:2;display:none;}
   .view.active{display:block;}
-  #homeScroll{position:absolute;inset:0;overflow:hidden;touch-action:none;cursor:grab;}
+  /* 스테이지 선택 영역: PLAY 버튼 위에서 잘리는 고정 경계(드래그해도 PLAY와 안 겹침) */
+  #homeScroll{position:absolute;left:0;right:0;top:0;bottom:150px;overflow:hidden;touch-action:none;cursor:grab;
+              -webkit-mask:linear-gradient(180deg,#000 0,#000 90%,transparent 100%);mask:linear-gradient(180deg,#000 0,#000 90%,transparent 100%);}
   #homeScroll:active{cursor:grabbing;}
   #pathInner{position:absolute;left:0;right:0;top:0;will-change:transform;}
   .seg{position:absolute;left:50%;transform:translateX(-50%);width:13px;border-radius:7px;
@@ -100,7 +102,7 @@
   #gameframe{width:100%;height:100%;border:none;display:block;}
   #toast{position:fixed;left:50%;bottom:160px;transform:translateX(-50%) translateY(20px);background:#13315cee;color:#fff;font-weight:800;padding:9px 16px;border-radius:10px;opacity:0;transition:.2s;z-index:80;pointer-events:none;}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-</style><link rel="stylesheet" href="editor.css?v=1780449565">
+</style><link rel="stylesheet" href="editor.css?v=1780450451">
 <script>window.__EDITOR=true;window.__EDITOR_CONFIG={
  "config": {
   "ROTATION_SPEED": 0.5,
@@ -218,7 +220,7 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
 
   // ====== 홈: 레벨 길 ======
   const homeScroll=document.getElementById('homeScroll'), pathInner=document.getElementById('pathInner');
-  const NODE_GAP=108, TOP_PAD=46, BOT_PAD=270;   // 현재 노드가 PLAY 버튼 위에 오도록 하단 여백 확보
+  const NODE_GAP=108, TOP_PAD=46, BOT_PAD=70;    // 스크롤 영역이 PLAY 위에서 잘리므로 하단 여백은 보통값
   let pathH=0, pScrollY=0, pMax=0;
   function buildPath(){
     pathInner.innerHTML='';
@@ -354,5 +356,5 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
 
   render();
 })();
-</script><script src="lobby_editor_addon.js?v=1780449565"></script>
+</script><script src="lobby_editor_addon.js?v=1780450451"></script>
 </body></html>
