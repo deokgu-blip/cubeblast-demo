@@ -4349,9 +4349,9 @@
   const DESIGN_H = 844;
 
   const GAME_CONFIG = {
-    ROTATION_SPEED: 0.5,
-    BULLET_SPEED: 111,
-    FIRE_INTERVAL: 0.1,
+    ROTATION_SPEED: 0.15,
+    BULLET_SPEED: 640,
+    FIRE_INTERVAL: 0.14,
     DEPLOY_FLY_TIME: 0.10,    // 큐→슬롯 점프 시간(초). 점프 느낌만 남기고 거의 즉시 배치
     FAIL_IDLE_SECONDS: 3,
     CONTINUE_COST: 300,            // 게임오버 시 '계속 플레이' 코인 비용
@@ -5560,9 +5560,9 @@
   // ===== octopus blasters (3D, camera-attached) =====
   // scale: 큐보다 큼(슬롯 0.72 > 큐 0.58). yOff: 받침이 슬롯 정중앙에 앉도록 정렬.
   // faceY=Math.PI(180°): 슬롯 권총문어 = 정확한 뒷모습(머리 뒤가 플레이어 정면). 런타임 aimYaw 스윙은 이 기준 주위.
-  const OCTO = { dist:13, spread:0.68, xOff:0.10, yOff:-1.40, scale:0.54, faceY:Math.PI, tiltX:0.18 };
+  const OCTO = { dist:13.003885424585281, spread:0.68, xOff:0.10, yOff:-1.5410511543120065, scale:0.64, faceY:Math.PI, tiltX:0.18 };
   // 슬롯 줄(탭박스+문어) 전체 위치/간격 — 에디터 조절. x:+오른쪽, y:+위(px), gap:슬롯 간격(px).
-  const SLOT_ROW = { x:0, y:43, gap:10 };
+  const SLOT_ROW = { x:0, y:15, gap:10 };
   let _slotRowDY = 0;   // SLOT_ROW.y(px)를 투영보정한 3D y 델타(문어가 탭박스 따라 상하 이동)
   const _vp = new THREE.Vector3();
   let octoSource=null, octoReady=false, useOcto=false;
@@ -5921,7 +5921,7 @@
   // faceY=-0.611(-35°): 블래스터 문어가 3/4 정면(레퍼런스 각도) — 얼굴·눈이 플레이어를 향하고 살짝 좌측향.
   // rowsPer:3 = 3줄(레퍼런스). 전 줄 동일한 블래스터 모델. 윗줄(row0)=다음 차례=선명 숫자, 아래 2줄=흐린 숫자.
   // rowGap 약간 축소(0.95→0.80)로 3줄이 화면에 들어오게. 뒷줄로 갈수록 살짝 작게(rowScaleFalloff)·뒤로(rowZ) 밀어 깊이감.
-  const QUEUE = { cols:3, rowsPer:3, colGap:0.82, rowGap:0.76, baseY:-1.92, dist:13, scale:0.58, faceY:-0.611, tiltX:0.18,
+  const QUEUE = { cols:3, rowsPer:3, colGap:0.86, rowGap:0.72, baseY:-2.3, dist:13, scale:0.38, faceY:-0.611, tiltX:0.18,
                   rowScaleFalloff:0.12, rowZ:0.55 };
   const queueOctos=[];   // { octo, qi }
   function disposeQueueOcto(o){
