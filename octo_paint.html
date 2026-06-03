@@ -3820,15 +3820,13 @@ function recordUndo(stroke, mo, i){
 }
 let curStroke=null;
 function paintAt(clientX, clientY){
-  // screen-space brush within brushPx of the cursor, with a LENIENT normalized normal gate:
-  // reject only clearly back-facing verts (dot < -0.35) so side-facing parts (cheeks) still paint,
-  // while the model's far/back side at the same screen point is excluded (no paint-through).
-  // (no raycast gate — source GLB has a stray vertex that corrupts boundingSphere/raycast.)
+  // screen-space brush + DEPTH gate: paint only the FRONT-most surface patch under the cursor,
+  // so paint/erase does NOT bleed to the back side. Depth-based (not normal-based) so side-facing
+  // parts (cheeks) are still painted. Positions are denormalized (KHR_mesh_quantization).
   const rect=renderer.domElement.getBoundingClientRect();
   const cx=clientX-rect.left, cy=clientY-rect.top, r2=brushPx*brushPx;
   const camPos=camera.position;
-  if (!curStroke) curStroke=[];
-  const touched=new Set();
+  const cand=[]; let minD=Infinity;                        // within-brush candidates: flattened mo,i,depth
   for (const mo of meshes){
     const mw=mo.mesh.matrixWorld, pos=mo.geo.attributes.position, dn=denormFactor(pos);
     for (let i=0;i<mo.N;i++){
@@ -3836,14 +3834,22 @@ function paintAt(clientX, clientY){
       _pv.copy(_v).project(camera);
       const sx=(_pv.x*0.5+0.5)*rect.width, sy=(-_pv.y*0.5+0.5)*rect.height;
       const dx=sx-cx, dy=sy-cy; if (dx*dx+dy*dy>r2) continue;
-      recordUndo(curStroke, mo, i);
-      if (mode==='paint'){ mo.fixed[i]=1; mo.fixcol[i*3]=brushLin[0]; mo.fixcol[i*3+1]=brushLin[1]; mo.fixcol[i*3+2]=brushLin[2]; }
-      else { mo.fixed[i]=0; }
-      applyVertexColor(mo,i); touched.add(mo);
+      const d=_v.distanceTo(camPos); cand.push(mo,i,d); if (d<minD) minD=d;
     }
   }
+  if (!cand.length) return false;
+  const tol=(ext||1)*0.32;                                 // front-surface depth band (excludes the back)
+  if (!curStroke) curStroke=[];
+  const touched=new Set();
+  for (let k=0;k<cand.length;k+=3){ const mo=cand[k], i=cand[k+1], d=cand[k+2];
+    if (d>minD+tol) continue;
+    recordUndo(curStroke, mo, i);
+    if (mode==='paint'){ mo.fixed[i]=1; mo.fixcol[i*3]=brushLin[0]; mo.fixcol[i*3+1]=brushLin[1]; mo.fixcol[i*3+2]=brushLin[2]; }
+    else { mo.fixed[i]=0; }
+    applyVertexColor(mo,i); touched.add(mo);
+  }
   touched.forEach(mo=> mo.geo.attributes.color.needsUpdate=true);
-  return true;
+  return touched.size>0;
 }
 function endStroke(){ if (curStroke && curStroke.length){ undoStack.push(curStroke); if(undoStack.length>60) undoStack.shift(); } curStroke=null; meshes.forEach(m=>m.touched.clear()); }
 function undo(){ const s=undoStack.pop(); if(!s){ setStatus('되돌릴 작업이 없어요.'); return; }
