@@ -22,6 +22,9 @@
   .preset{width:26px;height:26px;border-radius:7px;border:2px solid rgba(255,255,255,.35);cursor:pointer;padding:0;}
   .tool{border:none;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:800;cursor:pointer;color:#fff;background:rgba(255,255,255,.14);}
   .tool.on{background:#3a86ff;}
+  .psel-label{font-size:12.5px;opacity:.8;font-weight:700;align-self:center;}
+  .pbtn{border:none;border-radius:10px;padding:8px 14px;font-size:13.5px;font-weight:800;cursor:pointer;color:#cfe0f5;background:rgba(255,255,255,.10);}
+  .pbtn.on{background:#5fa8ff;color:#06203f;}
   .tool.primary{background:linear-gradient(180deg,#ffd93b,#f5b417);color:#5b3b00;box-shadow:0 3px 0 #c98f00;}
   .tool.primary:active{transform:translateY(2px);box-shadow:0 1px 0 #c98f00;}
   label.tool{display:inline-flex;align-items:center;}
@@ -45,6 +48,14 @@
     <div id="pickWrap"><input type="color" id="picker" value="#4d8bff"></div>
     <div id="presets"><button class="preset" data-c="#ff5b5b" style="background:#ff5b5b"></button><button class="preset" data-c="#ff9f43" style="background:#ff9f43"></button><button class="preset" data-c="#ffd93b" style="background:#ffd93b"></button><button class="preset" data-c="#7bd957" style="background:#7bd957"></button><button class="preset" data-c="#3ec1c9" style="background:#3ec1c9"></button><button class="preset" data-c="#4d8bff" style="background:#4d8bff"></button><button class="preset" data-c="#9b6bff" style="background:#9b6bff"></button><button class="preset" data-c="#ff7fb6" style="background:#ff7fb6"></button><button class="preset" data-c="#ffffff" style="background:#ffffff"></button><button class="preset" data-c="#cfd8e3" style="background:#cfd8e3"></button><button class="preset" data-c="#1c1c24" style="background:#1c1c24"></button><button class="preset" data-c="#8a5a2b" style="background:#8a5a2b"></button></div>
     <span class="legend"><span class="chip"></span>회청색 = 게임 큐브색</span>
+  </div>
+  <div class="row" id="partsel">
+    <span class="psel-label">부위</span>
+    <button class="pbtn on" data-part="all">전체</button>
+    <button class="pbtn" data-part="body">몸통</button>
+    <button class="pbtn" data-part="cheeks">볼</button>
+    <button class="pbtn" data-part="mouth">입</button>
+    <button class="pbtn" data-part="black">눈</button>
   </div>
   <div class="row">
     <button class="tool on" id="brushBtn">🖌️ 브러시</button>
@@ -3818,31 +3829,44 @@ function recordUndo(stroke, mo, i){
   mo.touched.add(i);
   stroke.push({mo, i, fixed:mo.fixed[i], r:mo.fixcol[i*3], g:mo.fixcol[i*3+1], b:mo.fixcol[i*3+2]});
 }
-let curStroke=null;
+let curStroke=null, activePart='all';   // activePart: 선택된 부위만 칠함('all'=앞면 전체, 볼/입 우선)
 function paintAt(clientX, clientY){
-  // screen-space brush + DEPTH gate: paint only the FRONT-most surface patch under the cursor,
-  // so paint/erase does NOT bleed to the back side. Depth-based (not normal-based) so side-facing
-  // parts (cheeks) are still painted. Positions are denormalized (KHR_mesh_quantization).
+  // brush + PART SELECT + DEPTH gate: paints only ONE part so it never bleeds onto neighbors.
+  // If a part is selected (몸통/볼/입/눈) only that part is touched. '전체'=front-most part under
+  // the cursor (small features 볼/입 preferred). Depth gate keeps it to the front surface.
+  // Positions denormalized (KHR_mesh_quantization).
   const rect=renderer.domElement.getBoundingClientRect();
   const cx=clientX-rect.left, cy=clientY-rect.top, r2=brushPx*brushPx;
   const camPos=camera.position;
-  const cand=[]; let minD=Infinity;                        // within-brush candidates: flattened mo,i,depth
+  const sel = activePart==='all' ? null : activePart;
+  const cand=[]; const partMinD=new Map(); let gMin=Infinity, gMinMo=null;
   for (const mo of meshes){
+    if (sel && mo.name!==sel) continue;                    // restrict to the selected part
     const mw=mo.mesh.matrixWorld, pos=mo.geo.attributes.position, dn=denormFactor(pos);
     for (let i=0;i<mo.N;i++){
       _v.set(pos.getX(i)*dn, pos.getY(i)*dn, pos.getZ(i)*dn).applyMatrix4(mw);
       _pv.copy(_v).project(camera);
       const sx=(_pv.x*0.5+0.5)*rect.width, sy=(-_pv.y*0.5+0.5)*rect.height;
       const dx=sx-cx, dy=sy-cy; if (dx*dx+dy*dy>r2) continue;
-      const d=_v.distanceTo(camPos); cand.push(mo,i,d); if (d<minD) minD=d;
+      const d=_v.distanceTo(camPos); cand.push(mo,i,d);
+      const pm=partMinD.get(mo); if (pm===undefined||d<pm) partMinD.set(mo,d);
+      if (d<gMin){ gMin=d; gMinMo=mo; }
     }
   }
   if (!cand.length) return false;
-  const tol=(ext||1)*0.32;                                 // front-surface depth band (excludes the back)
+  let target = sel ? gMinMo : gMinMo;                      // selected → that part; else front-most
+  if (!sel){                                               // '전체': prefer a small feature near the front
+    let nb=null, nbd=Infinity;
+    partMinD.forEach((d,mo)=>{ if((mo.name==='cheeks'||mo.name==='mouth') && d<nbd){ nbd=d; nb=mo; } });
+    if (nb && nbd <= gMin + (ext||1)*0.08) target=nb;
+  }
+  const frontD=partMinD.get(target);
+  if (frontD===undefined) return false;
+  const tol=(ext||1)*0.32;                                 // front-surface depth band of the target part
   if (!curStroke) curStroke=[];
   const touched=new Set();
   for (let k=0;k<cand.length;k+=3){ const mo=cand[k], i=cand[k+1], d=cand[k+2];
-    if (d>minD+tol) continue;
+    if (mo!==target || d>frontD+tol) continue;
     recordUndo(curStroke, mo, i);
     if (mode==='paint'){ mo.fixed[i]=1; mo.fixcol[i*3]=brushLin[0]; mo.fixcol[i*3+1]=brushLin[1]; mo.fixcol[i*3+2]=brushLin[2]; }
     else { mo.fixed[i]=0; }
@@ -3916,6 +3940,10 @@ function bind(){
   $('eraseBtn').onclick=()=>{ mode='erase'; syncTool(); };
   $('size').addEventListener('input', e=>{ brushPx=+e.target.value; updateRingSize(); });
   $('rotBtn').onclick=()=>{ rotateMode=!rotateMode; $('rotBtn').classList.toggle('on',rotateMode); setStatus(rotateMode?'회전 모드: 드래그로 모델을 돌려요. 다시 누르면 그리기.':'그리기 모드로 돌아왔어요.'); };
+  const PLABEL={all:'전체',body:'몸통',cheeks:'볼',mouth:'입',black:'눈'};
+  document.querySelectorAll('.pbtn').forEach(pb=> pb.onclick=()=>{ activePart=pb.dataset.part;
+    document.querySelectorAll('.pbtn').forEach(x=>x.classList.toggle('on',x===pb));
+    setStatus(activePart==='all'?'전체 모드: 앞면을 칠해요(볼·입은 자동 우선). 특정 부위만 칠하려면 위 부위를 골라요.':'["'+PLABEL[activePart]+'"]만 칠해져요 — 옆 부위엔 안 묻어요.'); });
   $('undo').onclick=undo; $('reset').onclick=resetAll; $('save').onclick=exportJSON;
   $('importFile').addEventListener('change', e=>{ if(e.target.files[0]) importJSON(e.target.files[0]); e.target.value=''; });
   window.addEventListener('keydown', e=>{ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); } });
