@@ -4240,7 +4240,6 @@
   @keyframes overShake { 0%,100%{transform:translateX(0);} 20%{transform:translateX(-9px);} 40%{transform:translateX(8px);} 60%{transform:translateX(-6px);} 80%{transform:translateX(4px);} }
 </style>
 <!-- ODG_REGION_END: styles -->
-<style id="ui-overrides">#preview-strip{transform:translate(0px,43px) scale(1)!important;transform-origin:center center}.coin-pill{transform:translate(0px,8px) scale(1)!important;transform-origin:center center}</style>
 </head>
 <body>
 
@@ -4249,12 +4248,12 @@
   <div id="game-container">
     <canvas id="gl-canvas"></canvas>
 
-    <div id="hud-top">
-      <div class="coin-pill"><div class="coin-bg"></div><span class="coin-icon"></span><span id="coin-amount">1.27K</span></div>
-      <div class="level-label" id="level-label">LEVEL 1</div>
+    <div id="hud-top" data-edit-id="hud-top">
+      <div class="coin-pill" data-edit-id="coin-pill"><div class="coin-bg" data-edit-id="coin-bg"></div><span class="coin-icon" data-edit-id="coin-icon"></span><span id="coin-amount" data-edit-id="coin-amount">1.27K</span></div>
+      <div class="level-label" id="level-label" data-edit-id="level-label">LEVEL 1</div>
     </div>
     <!-- 처음부터 재시작 버튼(스테이지/파워업 모두 초기화) -->
-    <button id="settings-btn" aria-label="Settings"><svg viewBox="0 0 24 24" width="23" height="23" aria-hidden="true"><path fill="#fff" d="M19.14 12.94a7.5 7.5 0 000-1.88l2.03-1.58a.5.5 0 00.12-.64l-1.92-3.32a.5.5 0 00-.61-.22l-2.39.96a7.3 7.3 0 00-1.62-.94l-.36-2.54A.5.5 0 0013.9 2h-3.8a.5.5 0 00-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 00-.61.22L2.7 8.84a.5.5 0 00.12.64l2.03 1.58a7.5 7.5 0 000 1.88L2.82 14.5a.5.5 0 00-.12.64l1.92 3.32a.5.5 0 00.61.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54a.5.5 0 00.5.42h3.8a.5.5 0 00.5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96a.5.5 0 00.61-.22l1.92-3.32a.5.5 0 00-.12-.64l-2.03-1.56zM12 15.5A3.5 3.5 0 1112 8.5a3.5 3.5 0 010 7z"/></svg></button>
+    <button id="settings-btn" data-edit-id="settings-btn" aria-label="Settings"><svg viewBox="0 0 24 24" width="23" height="23" aria-hidden="true"><path fill="#fff" d="M19.14 12.94a7.5 7.5 0 000-1.88l2.03-1.58a.5.5 0 00.12-.64l-1.92-3.32a.5.5 0 00-.61-.22l-2.39.96a7.3 7.3 0 00-1.62-.94l-.36-2.54A.5.5 0 0013.9 2h-3.8a.5.5 0 00-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 00-.61.22L2.7 8.84a.5.5 0 00.12.64l2.03 1.58a7.5 7.5 0 000 1.88L2.82 14.5a.5.5 0 00-.12.64l1.92 3.32a.5.5 0 00.61.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54a.5.5 0 00.5.42h3.8a.5.5 0 00.5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96a.5.5 0 00.61-.22l1.92-3.32a.5.5 0 00-.12-.64l-2.03-1.56zM12 15.5A3.5 3.5 0 1112 8.5a3.5 3.5 0 010 7z"/></svg></button>
     <div id="settings-overlay" aria-hidden="true">
       <div class="settings-card">
         <button class="settings-close" id="settings-close" aria-label="Close">×</button>
@@ -4264,14 +4263,14 @@
         <button class="settings-home-btn" id="settings-home">🏠 홈으로</button>
       </div>
     </div>
-    <div id="preview-strip"></div>
+    <div id="preview-strip" data-edit-id="preview-strip"></div>
 
-    <div id="slots-row"></div>
+    <div id="slots-row" data-edit-id="slots-row"></div>
     <div id="slot-extra" aria-hidden="true"></div>          <!-- 스프링 파워업으로 빠진 옥토퍼스가 들어갈 6번째 슬롯 -->
     <div id="octo-nums"></div>
     <div id="queue-row"></div>
 
-    <div id="powerups"></div>
+    <div id="powerups" data-edit-id="powerups"></div>
 
     <!-- 파워업 활성 시 전체 dim. 그 위로 클릭 가능한 리소스(3D는 보조 캔버스, DOM은 z-index 리프트)가 표시됨. -->
     <div id="dim-layer" aria-hidden="true"></div>
@@ -4916,8 +4915,7 @@
     const env=pmrem.fromEquirectangular(tex).texture; pmrem.dispose(); tex.dispose();
     return env;
   }
-  const studioEnv = makeStudioEnvMap(gl, '#f4f9ff', '#aebccf');
-  world.environment = studioEnv;
+  world.environment = null;   // 카툰 매트: 환경반사 제거(빛번짐 방지)
   // 하이라이트용 보조 렌더러(dim 위에 클릭 가능한 3D 오브젝트만 그림)
   const glCanvasHi = document.getElementById('gl-canvas-hi');
   const glHi = new THREE.WebGLRenderer({ canvas: glCanvasHi, antialias:true, alpha:true });
@@ -4938,15 +4936,15 @@
   (function setupLights(){
     // 부드러운 스튜디오 라이팅 + 환경맵 반사: 위=하늘빛/아래=바닥빛 환경광(입체감) + 키/필/림.
     // 환경맵이 면에 은은한 윤기를 주므로 directional 은 살짝 낮춰 '통일감 있는 고급 토이블록' 톤.
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x6c7d96, 0.55);
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x6c7d96, 0.80);
     world.add(hemi);
-    const amb = new THREE.AmbientLight(0xffffff, 0.16);
+    const amb = new THREE.AmbientLight(0xffffff, 0.40);
     world.add(amb);
-    const key = new THREE.DirectionalLight(0xffffff, 1.18);
+    const key = new THREE.DirectionalLight(0xffffff, 0.95);
     key.position.set(5,14,8); world.add(key);
-    const fill = new THREE.DirectionalLight(0xffffff, 0.40);
+    const fill = new THREE.DirectionalLight(0xffffff, 0.50);
     fill.position.set(-7,3,6); world.add(fill);
-    const rim = new THREE.DirectionalLight(0xcfe0ff, 0.62);
+    const rim = new THREE.DirectionalLight(0xcfe0ff, 0.40);
     rim.position.set(-6,5,-8); world.add(rim);
     // 모든 레이어 비추도록 설정(spotlight 모드에서 layer 1 객체도 조명 받게)
     hemi.layers.enableAll(); amb.layers.enableAll(); key.layers.enableAll(); fill.layers.enableAll(); rim.layers.enableAll();
@@ -4982,7 +4980,7 @@
     return tx;
   }
   // 프리미엄 토이블록: 환경맵 반사(envMapIntensity)로 면에 윤기 + 약간의 metalness. 과한 반짝임은 envMapIntensity로 절제.
-  let voxelMat = new THREE.MeshStandardMaterial({ roughness:0.32, metalness:0.10, envMapIntensity:0.85, map:makeVoxelTexture() });
+  let voxelMat = new THREE.MeshStandardMaterial({ roughness:0.95, metalness:0.0, map:makeVoxelTexture() });
 
   // 자산 우선: cube.glb 지오메트리(있으면), 없으면 BoxGeometry placeholder
   let voxelGeoResolved=null, voxelMatResolved=null;
@@ -5010,7 +5008,7 @@
         const sx=(g.boundingBox.max.x-g.boundingBox.min.x)||1;
         g.scale(1/sx,1/sx,1/sx);            // 1유닛 큐브 → 격자 간격 1에 딱 맞음(flush)
         voxelGeoResolved=g;
-        voxelMatResolved=new THREE.MeshStandardMaterial({ roughness:0.32, metalness:0.10, envMapIntensity:0.85, map:makeVoxelTexture() });
+        voxelMatResolved=new THREE.MeshStandardMaterial({ roughness:0.95, metalness:0.0, map:makeVoxelTexture() });
         return;
       }
     }
@@ -5489,12 +5487,13 @@
       }
       const d=document.createElement('div');
       d.className='pu'+((unlocked && !used)?'':' locked')+(disabled?' disabled':''); d.dataset.id=p.id;
+      d.dataset.editId='pu-'+p.id;
       let html='';
-      if (baseSrc) html+='<img class="pu-base" src="'+baseSrc+'" alt="">';
+      if (baseSrc) html+='<img class="pu-base" src="'+baseSrc+'" alt="" data-edit-id="pu-frame-'+p.id+'">';
       const iconSrc = loadedImages[p.slot] ? loadedImages[p.slot].src : null;
-      if (iconSrc) html+='<img class="pu-icon" src="'+iconSrc+'" alt="">';
+      if (iconSrc) html+='<img class="pu-icon" src="'+iconSrc+'" alt="" data-edit-id="pu-icon-'+p.id+'">';
       if (unlocked && !used){
-        html+='<div class="pu-badge">'+(badgeSrc?'<img src="'+badgeSrc+'" alt="">':'')+'<span>1</span></div>';
+        html+='<div class="pu-badge" data-edit-id="pu-badge-'+p.id+'">'+(badgeSrc?'<img src="'+badgeSrc+'" alt="">':'')+'<span>1</span></div>';
       } else if (!unlocked){
         html+='<div class="pu-lv">LV '+p.unlock+'</div>';
       }
@@ -5573,7 +5572,7 @@
         }
       }
     }
-    _octoMat=new THREE.MeshStandardMaterial({ vertexColors:true, color:0xffffff, roughness:0.42, metalness:0.05 });
+    _octoMat=new THREE.MeshStandardMaterial({ vertexColors:true, color:0xffffff, roughness:0.92, metalness:0.0 });
     buildGunSubmesh();   // 발사 시 '총'만 스케일업할 별도 submesh(공유 지오 + 센트로이드 피벗) 준비
     octoSource=src; useOcto=true;
   }
@@ -5593,17 +5592,25 @@
     const n=pos.count;
     // gun 정점 마스크: 고정색 + 어두운 회색(R≈G≈B, 30<v<110). 입/눈(노랑) 제외.
     const isGun=new Uint8Array(n);
-    let gx=0,gy=0,gz=0,gc=0;
+    // 1) 회색(고정) 후보 수집 + y범위 (총·받침 모두 회색이라 일단 다 모음)
+    const cand=[]; let minY=1e9,maxY=-1e9;
     for (let i=0;i<n;i++){
       if (!_octoFixed[i]) continue;
-      // _octoBakedLin 은 linear; sRGB 0~255 회색이면 R≈G≈B. linear 비교로도 회색은 세 채널이 거의 동일.
       const r=_octoBakedLin[i*3], g=_octoBakedLin[i*3+1], b=_octoBakedLin[i*3+2];
       const mx=Math.max(r,g,b), mn=Math.min(r,g,b);
-      // 회색(채널 편차 작음) + 너무 밝지 않음(흰색 몸통/하이라이트 배제) + 완전 검정(눈동자) 제외
-      if (mx-mn<0.04 && mx>0.01 && mx<0.30){
-        isGun[i]=1; gx+=pos.getX(i); gy+=pos.getY(i); gz+=pos.getZ(i); gc++;
-      }
+      if (mx-mn<0.04 && mx>0.01 && mx<0.30){ const y=pos.getY(i); cand.push(i); if(y<minY)minY=y; if(y>maxY)maxY=y; }
     }
+    if (cand.length<10){ _octoGunGeo=null; return; }
+    // 2) y 1D 2-means 로 아래(받침)/위(총) 분리 → '총'(위 클러스터)만 채택. 받침이 같은 회색이라 함께 부푸는 문제 방지.
+    let cLow=minY, cHigh=maxY;
+    for (let it=0; it<12; it++){
+      let sl=0,nl=0,sh=0,nh=0;
+      for (const i of cand){ const y=pos.getY(i); if (Math.abs(y-cLow)<=Math.abs(y-cHigh)){sl+=y;nl++;} else {sh+=y;nh++;} }
+      if (nl) cLow=sl/nl; if (nh) cHigh=sh/nh;
+    }
+    const ySplit=(cLow+cHigh)/2;
+    let gx=0,gy=0,gz=0,gc=0;
+    for (const i of cand){ if (pos.getY(i) >= ySplit){ isGun[i]=1; gx+=pos.getX(i); gy+=pos.getY(i); gz+=pos.getZ(i); gc++; } }
     if (gc<10){ _octoGunGeo=null; return; }   // 안전: 총 정점 인식 실패 시 펄스 비활성
     _octoGunCentroid.set(gx/gc, gy/gc, gz/gc);
     // gun 정점만 compact: 원래 정점 인덱스 → 새 인덱스. 좌표는 센트로이드 기준으로 미리 빼둠(pivot 회전·스케일이 깔끔).
@@ -6653,11 +6660,12 @@
     if (THREE.sRGBEncoding!==undefined) mkRenderer.outputEncoding=THREE.sRGBEncoding;
     if (THREE.ACESFilmicToneMapping!==undefined){ mkRenderer.toneMapping=THREE.ACESFilmicToneMapping; mkRenderer.toneMappingExposure=1.05; }
     mkScene=new THREE.Scene();
-    mkScene.environment=makeStudioEnvMap(mkRenderer, '#f4f9ff', '#aebccf');                                 // 환경맵 반사(윤기)
+    mkScene.environment=null;                                 // 카툰 매트: 환경반사 제거
     mkCam=new THREE.PerspectiveCamera(40,1,0.1,1000);
-    mkScene.add(new THREE.HemisphereLight(0xffffff, 0x60728c, 0.5));                                        // 부드러운 환경광
-    const dl=new THREE.DirectionalLight(0xffffff,0.95); dl.position.set(0.7,1.25,0.85); mkScene.add(dl);    // 메인 키라이트
-    const rim=new THREE.DirectionalLight(0xcfe8ff,0.62); rim.position.set(-0.85,0.35,-0.95); mkScene.add(rim); // 뒤쪽 림라이트(실루엣 분리)
+    mkScene.add(new THREE.HemisphereLight(0xffffff, 0x60728c, 0.82));                                        // 부드러운 환경광
+    mkScene.add(new THREE.AmbientLight(0xffffff, 0.30));
+    const dl=new THREE.DirectionalLight(0xffffff,0.9); dl.position.set(0.7,1.25,0.85); mkScene.add(dl);    // 메인 키라이트
+    const rim=new THREE.DirectionalLight(0xcfe8ff,0.4); rim.position.set(-0.85,0.35,-0.95); mkScene.add(rim); // 뒤쪽 림라이트(실루엣 분리)
     (function loop(){ mkRAF=requestAnimationFrame(loop);
       const now=performance.now()*0.001; let dt=_mkLast?Math.min(0.05, now-_mkLast):0.016; _mkLast=now;
       if(mkActive){ if(mkMesh) mkMesh.rotation.y-=0.012; mkStepDrops(dt); mkRenderer.render(mkScene,mkCam); }
@@ -6677,7 +6685,7 @@
     mkCx=(mnx+mxx)/2; mkCy=(mny+mxy)/2; mkCz=(mnz+mxz)/2;
     mkOrder=cubes.map(v=>({v, yy:v.y, rr:(v.x-mkCx)*(v.x-mkCx)+(v.z-mkCz)*(v.z-mkCz)})).sort((a,b)=> a.yy-b.yy || a.rr-b.rr).map(o=>o.v);  // 아래→위(같은 층은 중앙→바깥) → 떨어져 쌓임
     mkCur=di; mkCurTotal=mkOrder.length;
-    const geo=new THREE.BoxGeometry(0.92,0.92,0.92), mat=new THREE.MeshStandardMaterial({roughness:.34,metalness:.10,envMapIntensity:0.85});
+    const geo=new THREE.BoxGeometry(0.92,0.92,0.92), mat=new THREE.MeshStandardMaterial({roughness:0.95,metalness:0});
     mkMesh=new THREE.InstancedMesh(geo,mat,Math.max(1,mkOrder.length));
     const dm=new THREE.Object3D(), col=new THREE.Color();
     for(let i=0;i<mkOrder.length;i++){ const v=mkOrder[i]; dm.position.set(v.x-mkCx,v.y-mkCy,v.z-mkCz); dm.updateMatrix(); mkMesh.setMatrixAt(i,dm.matrix); col.setHex(hexToInt(v.c)); mkMesh.setColorAt(i,col); }
@@ -6692,15 +6700,15 @@
     // 받침 본체: 짧고 넓은 단일 실린더 (연파랑, 글로시)
     const daisH=tierH*2.4, rtop=horizR*1.10, rbot=horizR*1.42;
     const dais=new THREE.Mesh(new THREE.CylinderGeometry(rtop, rbot, daisH, 48),
-              new THREE.MeshStandardMaterial({color:0x8ec3f0, roughness:.26, metalness:.14}));
+              new THREE.MeshStandardMaterial({color:0x8ec3f0, roughness:.7, metalness:0}));
     dais.position.y=baseTopY - daisH/2; mkBase.add(dais);
     // 윗면 테두리 림: 밝은 흰~연파랑으로 위쪽을 강조
     const rim=new THREE.Mesh(new THREE.CylinderGeometry(rtop*1.04, rtop*1.04, tierH*0.5, 48),
-              new THREE.MeshStandardMaterial({color:0xdcecff, roughness:.18, metalness:.12}));
+              new THREE.MeshStandardMaterial({color:0xdcecff, roughness:.65, metalness:0}));
     rim.position.y=baseTopY - tierH*0.2; mkBase.add(rim);
     // 윗판(디오라마가 앉는 면): 밝은 흰빛
     const top=new THREE.Mesh(new THREE.CylinderGeometry(rtop*1.0, rtop*1.0, tierH*0.22, 48),
-              new THREE.MeshStandardMaterial({color:0xf6faff, roughness:.16, metalness:.1}));
+              new THREE.MeshStandardMaterial({color:0xf6faff, roughness:.6, metalness:0}));
     top.position.y=baseTopY + tierH*0.06; mkBase.add(top);
     mkScene.add(mkBase);
     mkShadow=new THREE.Mesh(new THREE.CircleGeometry(horizR*0.9, 40),
@@ -7615,5 +7623,6 @@
 })();
 </script>
 <!-- ODG_REGION_END: game-logic -->
+<script>(function(){var C={"preview-strip": {"dy": 43}, "coin-pill": {"dy": 8}};function ap(el){var id=el.getAttribute("data-edit-id"),o=C[id];if(!o)return;var p=[];if(o.dx||o.dy)p.push("translate("+(o.dx||0)+"px,"+(o.dy||0)+"px)");if(o.rot)p.push("rotate("+o.rot+"deg)");if(o.scale&&o.scale!=1)p.push("scale("+o.scale+")");if(p.length){el.style.transform=p.join(" ");el.style.transformOrigin="center center";}if(o.w)el.style.width=o.w+"px";if(o.h)el.style.height=o.h+"px";if(o.font)el.style.fontSize=o.font+"px";if(o.asset){if(el.tagName=="IMG")el.src=o.asset;else{el.style.backgroundImage='url("'+o.asset+'")';if(!el.style.backgroundSize)el.style.backgroundSize="contain";if(!el.style.backgroundRepeat)el.style.backgroundRepeat="no-repeat";if(!el.style.backgroundPosition)el.style.backgroundPosition="center";}}}function bg(){var b=C["@background"];if(b&&b.asset)document.documentElement.style.setProperty("--asset-background",'center/cover no-repeat url("'+b.asset+'")');}function all(){document.querySelectorAll("[data-edit-id]").forEach(ap);bg();}function boot(){all();new MutationObserver(function(ms){var t=0;ms.forEach(function(m){m.addedNodes.forEach(function(n){if(n.nodeType!=1)return;if(n.getAttribute&&n.getAttribute("data-edit-id")){ap(n);t=1;}if(n.querySelectorAll)n.querySelectorAll("[data-edit-id]").forEach(function(k){ap(k);t=1;});});});}).observe(document.body,{childList:true,subtree:true});}if(document.readyState!="loading")boot();else document.addEventListener("DOMContentLoaded",boot);})();</script>
 </body>
 </html>

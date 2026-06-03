@@ -1,0 +1,38 @@
+<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cube Blast — 리소스 에디터</title>
+<style>
+  html,body{margin:0;height:100%;font-family:'Apple SD Gothic Neo',-apple-system,sans-serif;background:#1d242e;overflow:hidden;}
+  #tabs{height:46px;display:flex;align-items:stretch;background:#11161d;border-bottom:1px solid #2a3340;}
+  #tabs button{flex:0 0 auto;padding:0 24px;background:none;border:none;color:#9fb0c2;font-size:15px;font-weight:700;cursor:pointer;border-bottom:3px solid transparent;}
+  #tabs button.on{color:#fff;border-bottom-color:#3a86ff;background:#171d26;}
+  #tabs .hint{margin-left:auto;align-self:center;padding-right:16px;color:#6b7c8f;font-size:12px;}
+  #frames{position:absolute;top:46px;left:0;right:0;bottom:0;}
+  iframe{position:absolute;inset:0;width:100%;height:100%;border:none;display:none;background:#1d242e;}
+  iframe.on{display:block;}
+  #load{position:absolute;top:46px;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;color:#8a98a8;font-size:14px;pointer-events:none;}
+</style></head>
+<body>
+<div id="tabs">
+  <button data-f="ig" class="on">🎮 인게임 UI</button>
+  <button data-f="lo">🏠 로비 UI</button>
+  <span class="hint">편집 → 우상단 ⬇ Export → 디스코드로 전송하면 게임에 반영</span>
+</div>
+<div id="frames">
+  <iframe id="ig" class="on" src="editor.html?stage=20"></iframe>
+  <iframe id="lo" data-src="lobby_editor.html"></iframe>
+</div>
+<script>
+  // lazy-load the lobby editor on first switch (avoid two WebGL games at once)
+  const tabs=document.querySelectorAll('#tabs button');
+  tabs.forEach(b=>b.addEventListener('click',()=>{
+    tabs.forEach(x=>x.classList.toggle('on',x===b));
+    const id=b.dataset.f;
+    document.querySelectorAll('#frames iframe').forEach(f=>{
+      const on=f.id===id;
+      if(on && !f.src && f.dataset.src) f.src=f.dataset.src;   // lazy init
+      f.classList.toggle('on',on);
+    });
+  }));
+</script>
+</body></html>

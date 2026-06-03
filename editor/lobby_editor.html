@@ -6,7 +6,7 @@
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;}
   html,body{height:100%;font-family:'Jua','Apple SD Gothic Neo',system-ui,sans-serif;color:#13315c;overflow:hidden;}
   #app{max-width:480px;margin:0 auto;height:100%;position:relative;overflow:hidden;
-       background:var(--bg2, linear-gradient(180deg,#36b3ff,#1f86e6)) center/cover no-repeat;}
+       background:linear-gradient(180deg, rgba(20,42,72,.62), rgba(30,60,92,.55)), var(--bg2, linear-gradient(180deg,#213a55 0%,#2c4a6b 50%,#34557a 100%)) center/cover no-repeat;}
 
   /* 상단: 좌 코인바 / 우 설정 */
   #top{position:absolute;top:calc(12px + env(safe-area-inset-top));left:14px;right:14px;z-index:8;
@@ -54,15 +54,12 @@
 
   /* ===== 상점 탭: 디오라마 컬렉션 ===== */
   #shopScroll{position:absolute;inset:0;overflow:hidden;touch-action:none;}
-  #shopHdr{position:absolute;top:6px;left:0;right:0;text-align:center;z-index:4;font-size:18px;
-           font-family:'BlackHanSans','Jua',sans-serif;
-           color:#fff;text-shadow:0 2px 0 rgba(8,40,80,.5);pointer-events:none;}
+  #shopHdr{display:none;}
   #podLayer{position:absolute;left:0;top:0;width:100%;will-change:transform;}
-  .pod{position:absolute;border-radius:50%/30%;
-       background:radial-gradient(120% 80% at 50% 30%, #ffffff 0%, #cfe8ff 45%, #8ec3f0 100%);
-       box-shadow:0 5px 0 rgba(8,40,80,.18), inset 0 3px 5px rgba(255,255,255,.7);
-       border:3px solid rgba(8,40,80,.25);}
-  .pod.locked{opacity:.5;filter:grayscale(.4);}
+  /* 받침대 → 은은한 접지 그림자 */
+  .pod{position:absolute;border-radius:50%;
+       background:radial-gradient(ellipse at center, rgba(0,0,0,.36) 0%, rgba(0,0,0,.18) 44%, rgba(0,0,0,0) 72%);}
+  .pod.locked{opacity:.4;}
   #shopcv{position:absolute;inset:0;width:100%;height:100%;z-index:3;pointer-events:none;}
   .podname{position:absolute;text-align:center;font-size:11px;font-weight:800;color:#13315c;}
 
@@ -103,7 +100,7 @@
   #gameframe{width:100%;height:100%;border:none;display:block;}
   #toast{position:fixed;left:50%;bottom:160px;transform:translateX(-50%) translateY(20px);background:#13315cee;color:#fff;font-weight:800;padding:9px 16px;border-radius:10px;opacity:0;transition:.2s;z-index:80;pointer-events:none;}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-</style><link rel="stylesheet" href="editor.css?v=1780425040">
+</style><link rel="stylesheet" href="editor.css?v=1780449565">
 <script>window.__EDITOR=true;window.__EDITOR_CONFIG={
  "config": {
   "ROTATION_SPEED": 0.5,
@@ -197,7 +194,7 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
   }
   function makeMesh(d, filled){
     const vd=voxOf(d), ord=vd.order, c0=vd.c;
-    const geo=new THREE.BoxGeometry(0.92,0.92,0.92), mat=new THREE.MeshStandardMaterial({roughness:.34,metalness:.10,envMapIntensity:0.85});
+    const geo=new THREE.BoxGeometry(0.92,0.92,0.92), mat=new THREE.MeshStandardMaterial({roughness:0.95,metalness:0});
     const m=new THREE.InstancedMesh(geo,mat,Math.max(1,ord.length));
     const dm=new THREE.Object3D(), col=new THREE.Color();
     for(let i=0;i<ord.length;i++){ const p=ord[i]; dm.position.set(p[0]-c0[0],p[1]-c0[1],p[2]-c0[2]); dm.updateMatrix(); m.setMatrixAt(i,dm.matrix); col.set(GROUP_DISPLAY[p[3]]||'#fff'); m.setColorAt(i,col); }
@@ -284,8 +281,9 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
     else if(THREE.sRGBEncoding!==undefined) sR.outputEncoding=THREE.sRGBEncoding;
     if(THREE.ACESFilmicToneMapping!==undefined){ sR.toneMapping=THREE.ACESFilmicToneMapping; sR.toneMappingExposure=1.05; }
     sS=new THREE.Scene(); sC=new THREE.OrthographicCamera(-1,1,1,-1,-3000,3000); sC.position.set(0,0,1000);
-    sEnv=makeStudioEnvMap(sR); sS.environment=sEnv;
-    sS.add(new THREE.HemisphereLight(0xffffff,0x6c7d96,0.55));
+    sS.environment=null;   // 카툰 매트: 환경반사 제거
+    sS.add(new THREE.HemisphereLight(0xffffff,0x6c7d96,0.82));
+    sS.add(new THREE.AmbientLight(0xffffff,0.32));
     const dl=new THREE.DirectionalLight(0xffffff,0.92); dl.position.set(0.5,1.1,1.2); sS.add(dl);
     (function loop(){ sRAF=requestAnimationFrame(loop); if(!views.shop.classList.contains('active'))return;
       for(const it of sItems) it.rotation.y-=0.011; sS.position.y=sScrollY; sR.render(sS,sC); })();
@@ -295,15 +293,16 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
   function buildShop(){
     sEnsure();
     SGW=shopScroll.clientWidth; SGH=shopScroll.clientHeight;
-    SCELL=(SGW/COLS)*0.62; SROW=(SGW/COLS)*0.86;
+    SCELL=(SGW/COLS)*0.72; SROW=(SGW/COLS)*1.0;
     const N=DIORAMAS.length, rows=Math.ceil(N/COLS);
     while(pods.length<N){ const p=document.createElement('div'); p.className='pod'; const nm=document.createElement('div'); nm.className='podname';
       podLayer.appendChild(p); podLayer.appendChild(nm); pods.push({p,nm}); }
     for(let i=0;i<N;i++){ const s=podSeat(i), o=pods[i], done=i<META.di||(i===META.di&&META.filled>=DIORAMAS[i].total);
-      o.p.style.width=SCELL+'px'; o.p.style.height=(SCELL*0.5)+'px';
-      o.p.style.left=(s.cx-SCELL/2)+'px'; o.p.style.top=(s.seatY-SCELL*0.18)+'px';
+      const shW=SCELL*0.58, shH=SCELL*0.18;
+      o.p.style.width=shW+'px'; o.p.style.height=shH+'px';
+      o.p.style.left=(s.cx-shW/2)+'px'; o.p.style.top=(s.seatY-shH*0.35)+'px';
       o.p.classList.toggle('locked', !done && i!==META.di);
-      o.nm.style.left=(s.cx-SCELL/2)+'px'; o.nm.style.width=SCELL+'px'; o.nm.style.top=(s.seatY+SCELL*0.34)+'px';
+      o.nm.style.left=(s.cx-SCELL/2)+'px'; o.nm.style.width=SCELL+'px'; o.nm.style.top=(s.seatY+SCELL*0.46)+'px';
       o.nm.textContent = (i<=META.di)? DIORAMAS[i].name : '???'; }
     podLayer.style.height=(18+rows*SROW+40)+'px';
     sR.setPixelRatio(Math.min(2,devicePixelRatio||1)); sR.setSize(SGW,SGH,false);
@@ -312,7 +311,7 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
     const shown=Math.min(META.di,DIORAMAS.length-1);
     for(let i=0;i<=shown;i++){ const d=DIORAMAS[i],vd=voxOf(d),filled=(i<META.di)?d.total:META.filled; if(filled<=0)continue;
       const s=podSeat(i), wx=s.cx-SGW/2, wy=SGH/2-s.seatY;
-      const sc=Math.min((0.62*SCELL)/vd.ext,(0.80*SROW)/vd.hy);
+      const sc=Math.min((0.82*SCELL)/vd.ext,(0.92*SROW)/vd.hy);
       const g=new THREE.Group(); g.add(makeMesh(d,filled)); g.scale.setScalar(sc);
       g.position.set(wx, wy+sc*vd.hy/2, 0); sS.add(g); sItems.push(g); }
     sMax=Math.max(0,(18+rows*SROW+40)-SGH); setSScroll(sScrollY);
@@ -355,5 +354,5 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
 
   render();
 })();
-</script><script src="lobby_editor_addon.js?v=1780425040"></script>
+</script><script src="lobby_editor_addon.js?v=1780449565"></script>
 </body></html>
