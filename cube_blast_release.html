@@ -5023,6 +5023,7 @@
   let occupied = new Set();      // active positions "x,y,z"
   const colorVoxelList = {};     // group -> [voxel,...] (active surface candidates filtered at query)
   let modelCenter = new THREE.Vector3();
+  let modelFrameInfo = null;   // 회전 슬롯 클리어런스 프레이밍 디버그 정보
 
   function keyOf(v){ return v.x+','+v.y+','+v.z; }
 
@@ -5050,6 +5051,69 @@
     const dW = effW / (2*FRAC_W*Math.tan(halfFov)*aspect);
     camDist = Math.max(GAME_CONFIG.ZOOM_MIN, Math.min(GAME_CONFIG.ZOOM_MAX, Math.max(dV, dW)));
     player.zoom = camDist; applyCamera();
+    // === 회전 슬롯 침범 방지 ===
+    // 모델은 월드 Y=0 중심. Y축 자동회전 동안 모델 바운딩의 8코너가 그리는 화면상 최저점(가장 아래로 내려오는
+    // 점)이 슬롯/문어 영역을 침범하지 않도록, 모든 회전각에서 실제 카메라로 투영해 '화면 최저 NDC'를 구하고
+    // 슬롯행 상단(clearNDC) 위에 머물도록 모델을 위로 올림(modelLiftY) → 부족분만 살짝 축소(modelFrameScale).
+    // 큰 모델은 가능한 크게 유지하되 슬롯 클리어런스가 우선. (Y회전만 — 자동회전 축과 일치.)
+    {
+      const halfX=(maxx-minx)/2 + 0.5, halfY=(maxy-miny)/2 + 0.5, halfZ=(maxz-minz)/2 + 0.5;  // 큐브 절반(0.5) 포함
+      // 슬롯행 상단의 화면 세로 비율(위에서부터). slots-row bottom=268px + slot 46px + 24px 안전여유.
+      const slotTopY = DESIGN_H - (268+46+24);
+      const clearNDC = 1 - 2*(slotTopY/DESIGN_H);   // NDC y (위=+1, 아래=-1)
+      // 주어진 lift·scale에서, 36개 Y회전각 × 8코너의 화면 최저 NDC y 반환(가장 아래 = 최소값).
+      const _cp=new THREE.Vector3();
+      viewCam.position.set(0, baseCamY, camDist); viewCam.lookAt(0, lookY, 0); viewCam.updateMatrixWorld(true);
+      const lowestNDC = (lift, scale) => {
+        let lo=1;
+        for (let a=0;a<36;a++){ const ang=a*Math.PI*2/36, ca=Math.cos(ang), sa=Math.sin(ang);
+          for (let sx=-1;sx<=1;sx+=2) for (let sy=-1;sy<=1;sy+=2) for (let sz=-1;sz<=1;sz+=2){
+            const x=sx*halfX, y=sy*halfY, z=sz*halfZ;
+            const lx=x*ca+z*sa, lz=-x*sa+z*ca;
+            _cp.set(lx*scale, y*scale+lift, lz*scale); _cp.project(viewCam);
+            if (_cp.y<lo) lo=_cp.y;
+          } }
+        return lo;
+      };
+      // 머리 최상단 NDC(올림 후 화면 위로 잘리는지). 같은 코너 스윕의 최댓값.
+      const highestNDC = (lift, scale) => {
+        let hi=-1;
+        for (let a=0;a<36;a++){ const ang=a*Math.PI*2/36, ca=Math.cos(ang), sa=Math.sin(ang);
+          for (let sx=-1;sx<=1;sx+=2) for (let sy=-1;sy<=1;sy+=2) for (let sz=-1;sz<=1;sz+=2){
+            const x=sx*halfX, y=sy*halfY, z=sz*halfZ;
+            const lx=x*ca+z*sa, lz=-x*sa+z*ca;
+            _cp.set(lx*scale, y*scale+lift, lz*scale); _cp.project(viewCam);
+            if (_cp.y>hi) hi=_cp.y;
+          } }
+        return hi;
+      };
+      let modelFrameScale = 1, modelLiftY = 0;
+      // 1) 위로 올려 클리어 확보(머리 NDC가 0.97 넘으면 중단 → 나머지는 축소로). 모델 단위로 한 스텝씩 이분.
+      if (lowestNDC(0,1) < clearNDC){
+        let lo=0, hi=halfY*2;   // lift 후보 범위(0 ~ 모델 높이)
+        for (let it=0; it<22; it++){
+          const mid=(lo+hi)/2;
+          if (lowestNDC(mid,1) >= clearNDC && highestNDC(mid,1) <= 0.97) { hi=mid; } else { lo=mid; }
+        }
+        modelLiftY = hi;
+        if (highestNDC(modelLiftY,1) > 0.97){           // 올림만으론 머리가 잘림 → lift 줄이고 축소 병행
+          let l2=0, h2=modelLiftY;
+          for (let it=0; it<18; it++){ const mid=(l2+h2)/2; if (highestNDC(mid,1)<=0.97) l2=mid; else h2=mid; }
+          modelLiftY = l2;
+        }
+      }
+      // 2) lift 후에도 침범하면 축소(슬롯 클리어 보장). 큰 모델만 약하게 줄어듦(0.7 하한).
+      for (let it=0; it<14; it++){
+        if (lowestNDC(modelLiftY, modelFrameScale) >= clearNDC) break;
+        modelFrameScale *= 0.975;
+        if (modelFrameScale <= 0.7) { modelFrameScale = 0.7; break; }
+      }
+      modelGroup.position.set(0, modelLiftY, 0);
+      modelGroup.scale.setScalar(modelFrameScale);
+      modelFrameInfo = { lift:+modelLiftY.toFixed(2), scale:+modelFrameScale.toFixed(3),
+                         lowestNDC:+lowestNDC(modelLiftY, modelFrameScale).toFixed(3),
+                         highestNDC:+highestNDC(modelLiftY, modelFrameScale).toFixed(3), clearNDC:+clearNDC.toFixed(3) };
+    }
 
     occupied = new Set(voxels.map(keyOf));
     for (const g in colorVoxelList) delete colorVoxelList[g];
@@ -5188,30 +5252,29 @@
   // - 130 이상 남으면 1×40 + 1×70 + 1×20 으로 모든 종류 포함
   // - 그 외는 40 채움. 10/20/30 leftover는 한 개 캐논으로
   // - 1의 자리(1~9 remainder)는 마지막 캐논 하나에 몰아넣음
-  function distributeBullets(total){
+  // 한 색 그룹의 복셀(total)을 캐논(문어)들로 분배. 총합=total 보존(전체 파괴량 불변).
+  // 복셀 많은 스테이지(stageTotal↑)일수록 캐논 1개당 탄(chunk)을 키워 → 문어 수를 줄임(화면 덜 붐빔).
+  // 작은 스테이지는 기존(40/70/20)과 비슷하게 유지.
+  function distributeBullets(total, stageTotal){
     if (total<=0) return [];
+    // 스테이지 복셀량 → 캐논당 탄 배율. 기준 ~1500vox 이하=1x, 6000vox≈1.9x 까지 선형.
+    const st = stageTotal || total;
+    const scale = Math.max(1, Math.min(1.9, 1 + (st - 1500)/5000));
+    // 기본 칩 세트(40/70/20)를 배율로 키워 큰/중/작 캐논 크기 결정(10단위 반올림).
+    const round10 = (x)=>Math.max(10, Math.round(x/10)*10);
+    const BIG = round10(70*scale), MID = round10(40*scale), SML = round10(20*scale);
+    const CYCLE = BIG + BIG + MID + MID + MID + SML;   // 한 사이클 합(원본 3:2:1 패턴의 스케일판)
     const rem = total % 10;
     let remaining = total - rem;
     const arr = [];
-    // 큰 사이클 (3:2:1)
-    while (remaining >= 280){
-      arr.push(40,40,40,70,70,20);
-      remaining -= 280;
-    }
-    // 130 이상: 작은 1:1:1 사이클(세 종류 모두 포함)
-    if (remaining >= 130){
-      arr.push(40,70,20);
-      remaining -= 130;
-    }
-    // 남은 양은 40으로
-    while (remaining >= 40){
-      arr.push(40);
-      remaining -= 40;
-    }
-    // leftover (10, 20, 30) — 한 개 캐논
-    if (remaining > 0) arr.push(remaining);
-    // 1의 자리 remainder (1~9) — 마지막 한 개 캐논에 몰아둠
-    if (rem > 0) arr.push(rem);
+    // 큰 사이클(스케일된 3:2:1)
+    while (remaining >= CYCLE){ arr.push(MID,MID,MID,BIG,BIG,SML); remaining -= CYCLE; }
+    // 중간 사이클(세 종류 1:1:1)
+    if (remaining >= BIG+MID+SML){ arr.push(MID,BIG,SML); remaining -= (BIG+MID+SML); }
+    // 남은 양은 MID 크기로 채움
+    while (remaining >= MID){ arr.push(MID); remaining -= MID; }
+    if (remaining > 0) arr.push(remaining);   // leftover(<MID) — 한 개 캐논
+    if (rem > 0) arr.push(rem);                // 1의 자리 remainder(1~9) — 한 개 캐논
     return arr;
   }
   // ===== 큐 색상 사전 할당(정적) =====
@@ -5250,10 +5313,12 @@
       counts[v.group]=(counts[v.group]||0)+1;
     }
     for (const g in depthsByColor) depthsByColor[g].sort((a,b)=>a-b);
+    // 스테이지 전체 활성 복셀 수(문어 수 절감용 청크 스케일 기준)
+    let _stageTotalVox=0; for (const g in counts) _stageTotalVox+=counts[g];
     // 색별 octopus 생성 — 각 octopus 정렬키 = 담당 복셀 묶음 평균 깊이 + 지터
     const specs=[];
     for (const g in counts){
-      const arr=distributeBullets(counts[g]).sort((a,b)=>b-a);   // 큰 것부터
+      const arr=distributeBullets(counts[g], _stageTotalVox).sort((a,b)=>b-a);   // 큰 것부터(스테이지 복셀량 비례 청크)
       const ds=depthsByColor[g]; let idx=0;
       for (let k=0;k<arr.length;k++){
         const b=arr[k]; let s=0, cnt=0;
@@ -5756,13 +5821,12 @@
     muzzle.position.set(0, 0.85, 0);                 // local — 머리 상단(스케일·틸트 적용 후 머리 꼭대기 중앙)
     inst.add(muzzle);
     inst.userData.muzzle=muzzle;
-    // 멀티샷 3 발사구(입·왼총구·오른총구). OCTO_COLORS 정점색으로 군집화해 구한 모델 로컬좌표(베이스 중심정렬 기준).
-    //   입  = 얼굴 정면 노란 군집 중심,  왼/오른 총구 = 어두운(총) 정점 2군집의 바깥·전방·위쪽 끝(배럴 입구).
+    // 멀티샷 발사구: 양손 권총 총구 2곳만(입에서는 발사 안 함). OCTO_COLORS 정점색으로 군집화해 구한 모델 로컬좌표.
+    //   왼/오른 총구 = 어두운(총) 정점 2군집의 바깥·전방·위쪽 끝(배럴 입구).
     // 메시는 grp 안에 추가됐고 베이스 지오는 grp 원점 중심정렬되어 있으므로, 이 좌표를 inst(=grp)의 자식 앵커로 두면
-    // 스케일·yaw·틸트·deploy 슬라이드 모든 변환을 그대로 따라가 "항상 입·총구에서 발사"가 보장된다.
+    // 스케일·yaw·틸트·deploy 슬라이드 모든 변환을 그대로 따라가 "항상 총구에서 발사"가 보장된다.
     const mkAnchor=(x,y,z)=>{ const a=new THREE.Object3D(); a.position.set(x,y,z); inst.add(a); return a; };
     inst.userData.muzzles=[
-      mkAnchor(-0.02, -0.01, 0.25),   // mouth (얼굴 정면)
       mkAnchor(-0.439, 0.029, 0.333), // left pistol muzzle
       mkAnchor( 0.44,  0.003, 0.407), // right pistol muzzle
     ];
@@ -6062,7 +6126,8 @@
     m.visible=false; world.add(m);
     BULLET_POOL.push({ mesh:m, slot:i,   // slot: 병합 버퍼 내 이 총알의 정점 영역 인덱스
       hx:new Float32Array(TRAIL_RAW_N), hy:new Float32Array(TRAIL_RAW_N), hz:new Float32Array(TRAIL_RAW_N), hlen:0,
-      origin:new THREE.Vector3(), active:false, target:null, group:null, sx:0,sy:0,sz:0, t:0 });
+      origin:new THREE.Vector3(), active:false, target:null, group:null, sx:0,sy:0,sz:0, t:0,
+      cr:1, cg:1, cb:1 });   // 트레일 RGB(= 부수는 큐브 색). 흰색→큐브색으로 살짝 밝게 섞어 발광감.
   }
   // 비활성 총알의 트레일 영역을 0(degenerate)으로 → 렌더 안 됨
   function _clearTrailSlot(b){
@@ -6106,7 +6171,8 @@
     let ci=b.slot*TRAIL_VERTS*4;   // color cursor(×4, RGBA) — slot 시작
     const posEnd=k+TRAIL_VERTS*3;
     _trailDirty=true;
-    // RGB는 항상 흰색, A(투명도)만 페이드 → 검정으로 어두워지지 않고 흰 발광이 옅어지며 사라짐. (클로저 없이 인라인 — GC 0)
+    // RGB는 이 총알의 색(=부수는 큐브 색), A(투명도)만 페이드 → 색이 옅어지며 발광하듯 사라짐. (클로저 없이 인라인 — GC 0)
+    const tr=b.cr, tg=b.cg, tb=b.cb;
     for (let i=0;i<n-1;i++){
       _tp0.set(_rsX[i], _rsY[i], _rsZ[i]);
       _tp1.set(_rsX[i+1], _rsY[i+1], _rsZ[i+1]);
@@ -6124,13 +6190,13 @@
       const bx=_tp0.x-px*w0, by=_tp0.y-py*w0, bz=_tp0.z-pz*w0;
       const cx=_tp1.x+px*w1, cy=_tp1.y+py*w1, cz=_tp1.z+pz*w1;
       const dx=_tp1.x-px*w1, dy=_tp1.y-py*w1, dz=_tp1.z-pz*w1;
-      // tri1: a,b,c  tri2: b,d,c  (alpha: p0끝=a0, p1끝=a1) — color는 흰색 고정, alpha만 기록
-      pos[k]=ax;pos[k+1]=ay;pos[k+2]=az; k+=3; col[ci]=1;col[ci+1]=1;col[ci+2]=1;col[ci+3]=a0; ci+=4;
-      pos[k]=bx;pos[k+1]=by;pos[k+2]=bz; k+=3; col[ci]=1;col[ci+1]=1;col[ci+2]=1;col[ci+3]=a0; ci+=4;
-      pos[k]=cx;pos[k+1]=cy;pos[k+2]=cz; k+=3; col[ci]=1;col[ci+1]=1;col[ci+2]=1;col[ci+3]=a1; ci+=4;
-      pos[k]=bx;pos[k+1]=by;pos[k+2]=bz; k+=3; col[ci]=1;col[ci+1]=1;col[ci+2]=1;col[ci+3]=a0; ci+=4;
-      pos[k]=dx;pos[k+1]=dy;pos[k+2]=dz; k+=3; col[ci]=1;col[ci+1]=1;col[ci+2]=1;col[ci+3]=a1; ci+=4;
-      pos[k]=cx;pos[k+1]=cy;pos[k+2]=cz; k+=3; col[ci]=1;col[ci+1]=1;col[ci+2]=1;col[ci+3]=a1; ci+=4;
+      // tri1: a,b,c  tri2: b,d,c  (alpha: p0끝=a0, p1끝=a1) — RGB=총알색, alpha만 페이드 기록
+      pos[k]=ax;pos[k+1]=ay;pos[k+2]=az; k+=3; col[ci]=tr;col[ci+1]=tg;col[ci+2]=tb;col[ci+3]=a0; ci+=4;
+      pos[k]=bx;pos[k+1]=by;pos[k+2]=bz; k+=3; col[ci]=tr;col[ci+1]=tg;col[ci+2]=tb;col[ci+3]=a0; ci+=4;
+      pos[k]=cx;pos[k+1]=cy;pos[k+2]=cz; k+=3; col[ci]=tr;col[ci+1]=tg;col[ci+2]=tb;col[ci+3]=a1; ci+=4;
+      pos[k]=bx;pos[k+1]=by;pos[k+2]=bz; k+=3; col[ci]=tr;col[ci+1]=tg;col[ci+2]=tb;col[ci+3]=a0; ci+=4;
+      pos[k]=dx;pos[k+1]=dy;pos[k+2]=dz; k+=3; col[ci]=tr;col[ci+1]=tg;col[ci+2]=tb;col[ci+3]=a1; ci+=4;
+      pos[k]=cx;pos[k+1]=cy;pos[k+2]=cz; k+=3; col[ci]=tr;col[ci+1]=tg;col[ci+2]=tb;col[ci+3]=a1; ci+=4;
     }
     // 미사용 정점(이 slot 영역 내): position 0(degenerate). 업로드는 updateBullets에서 1회.
     for (; k<posEnd; k++) pos[k]=0;
@@ -6147,7 +6213,9 @@
     if (target) target.reserved=true;     // 이 voxel은 곧 파괴됨 → 다른 총알이 같은 곳 안 쏨
     b.mesh.position.copy(_v1); b.mesh.visible=true;
     b.origin.copy(_v1);
-    b.mesh.material.color.set('#ffffff');
+    b.mesh.material.color.setHex(octoColorHex(group));   // 총알 색 = 부수는 큐브(복셀) 색
+    // 트레일 RGB: 큐브색을 흰쪽으로 살짝 밝게(additive blend라 색 유지 + 발광감). mix 0.35.
+    { const _bc=b.mesh.material.color; b.cr=_bc.r+(1-_bc.r)*0.35; b.cg=_bc.g+(1-_bc.g)*0.35; b.cb=_bc.b+(1-_bc.b)*0.35; }
     b.mesh.scale.setScalar(BULLET_SCALE); // 둥근 원(uniform)
     // 트레일 히스토리 리셋 — 머즐 위치로 시드(과거 위치가 머즐 뒤로 가지 않음)
     b.hlen=1; b.hx[0]=_v1.x; b.hy[0]=_v1.y; b.hz[0]=_v1.z;
@@ -6344,17 +6412,17 @@
     if (c.bullets<=0) return;
     c.fireCooldown-=dt;
     if (c.fireCooldown<=0){
-      // 멀티샷: 입·왼총구·오른총구 3곳에서 같은 색 타겟 최대 3개를 동시 발사.
-      // 남은 탄/가시 타겟이 3개 미만이면 있는 만큼만. pickTargets가 임시 예약하며 중복 없이 뽑는다.
-      const wantN=Math.min(3, c.bullets);
+      // 멀티샷: 양손 권총 총구 2곳에서 같은 색 타겟 최대 2개를 동시 발사(입에서는 발사 안 함).
+      // 남은 탄/가시 타겟이 2개 미만이면 있는 만큼만. pickTargets가 임시 예약하며 중복 없이 뽑는다.
+      const wantN=Math.min(2, c.bullets);
       const picks=pickTargets(c.color, wantN);   // 스크래치(_multiPicks) — 즉시 소비
       const got=picks.length;
       if (got>0){
-        const muz=(c.octo && c.octo.userData.muzzles) || null;   // [입, 왼총구, 오른총구]
+        const muz=(c.octo && c.octo.userData.muzzles) || null;   // [왼총구, 오른총구]
         let fired=0;
         for (let k=0;k<got;k++){
           const tv=picks[k];
-          const anchor=muz ? muz[k % muz.length] : null;         // 발사구 순환(입→왼→오른)
+          const anchor=muz ? muz[k % muz.length] : null;         // 발사구 순환(왼→오른)
           if (spawnBullet(c.octo, c.color, tv, c, anchor)){       // 풀 여유 시에만 발사(고갈 시 중단)
             c.bullets--; c.inflight++; fired++;
           } else {
@@ -6573,15 +6641,22 @@
     _clearElapsed=0; _topConfettiStarted=false; _fireworksStarted=false;
     elClearOverlay.classList.add('show');
     _confettiRAFLoop();
+    // 중복 방지: 이전 클리어에서 남은 핸들러 제거 + once 가드(탭/합성 이벤트 중복 발화 차단)
+    if (_clearTapHandler){ elClearOverlay.removeEventListener('pointerdown', _clearTapHandler); _clearTapHandler=null; }
+    let _fired=false;
     const tapHandler = (e) => {
+      if (_fired) return; _fired=true;                          // 동일 클리어 1회만
       e.preventDefault(); e.stopPropagation();
       elClearOverlay.classList.remove('show');
       elClearOverlay.removeEventListener('pointerdown', tapHandler);
+      _clearTapHandler=null;
       _stopConfetti();
       if (onNext) onNext();
     };
+    _clearTapHandler = tapHandler;
     elClearOverlay.addEventListener('pointerdown', tapHandler);
   }
+  let _clearTapHandler=null;
   let _confettiLast=0;
   function _confettiRAFLoop(){
     const now = performance.now()*0.001;
@@ -6641,6 +6716,7 @@
   }
   function hideStageClear(){
     elClearOverlay.classList.remove('show');
+    if (_clearTapHandler){ elClearOverlay.removeEventListener('pointerdown', _clearTapHandler); _clearTapHandler=null; }
     _stopConfetti();
   }
 
@@ -6651,7 +6727,7 @@
   let mkHold=false, mkCubesLeft=0, mkTimer=null, mkOnExit=null, mkFinished=false, mkMsEls=null;
   let mkCx=0,mkCy=0,mkCz=0, mkCurTotal=1, mkDropH=8, mkProj=[], _mkLast=0;
   let mkCelebrating=false, mkCelebT=0, mkPopT=0;       // 디오라마 완성 연출
-  const MK_DROP_CAP=10, MK_DROP_DUR=0.36;        // 동시 낙하 블록 수 / 낙하 시간
+  const MK_DROP_CAP=10, MK_DROP_DUR=0.18;        // 동시 블록 수 / 스냅 시간(짧게 → 자석처럼 빠르게 착)
   let _mkShadowTex=null;
   function mkShadowTexture(){ if(_mkShadowTex) return _mkShadowTex; const c=document.createElement('canvas'); c.width=c.height=128; const g=c.getContext('2d'); const rad=g.createRadialGradient(64,64,3,64,64,62); rad.addColorStop(0,'rgba(16,26,48,.55)'); rad.addColorStop(.55,'rgba(16,26,48,.30)'); rad.addColorStop(1,'rgba(16,26,48,0)'); g.fillStyle=rad; g.fillRect(0,0,128,128); _mkShadowTex=new THREE.CanvasTexture(c); return _mkShadowTex; }
   function mkEnsure(){
@@ -6769,20 +6845,27 @@
     el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');   // 애니메이션 리셋·재생
     haptic('medium');
   }
-  function mkSpawnDrop(targetIdx){               // 타겟 복셀 위에서 "같은 색" 블록이 떨어짐
+  function mkSpawnDrop(targetIdx){               // 타겟 복셀 위에서 "같은 색" 블록이 자석처럼 착 붙음
     const v=mkOrder[targetIdx]; if(!v) return;
     const tx=v.x-mkCx, ty=v.y-mkCy, tz=v.z-mkCz;
     const geo=new THREE.BoxGeometry(0.92,0.92,0.92), mat=new THREE.MeshStandardMaterial({color:hexToInt(v.c), roughness:.5, metalness:.05});
-    const m=new THREE.Mesh(geo,mat); m.position.set(tx, ty+mkDropH, tz); mkScene.add(m);
-    mkProj.push({mesh:m, t:0, x:tx, z:tz, y0:ty+mkDropH, y1:ty});
+    // 시작 오프셋을 짧게(부유 낙하감 제거) → 가까운 거리에서 빠르게 스냅. 약간의 랜덤 방향감(좌/우/위)으로 기계적이지 않게.
+    const h=mkDropH*0.55;
+    const m=new THREE.Mesh(geo,mat); m.position.set(tx, ty+h, tz); m.scale.setScalar(0.82); mkScene.add(m);
+    mkProj.push({mesh:m, t:0, x:tx, z:tz, y0:ty+h, y1:ty});
   }
+  // easeOutBack: 목표를 살짝 지나쳤다 되돌아오는 탄성(자석 착 붙는 팝). s=오버슈트 강도.
+  function _easeOutBack(k){ const s=1.7; const u=k-1; return 1 + (s+1)*u*u*u + s*u*u; }
   function mkStepDrops(dt){
     let landed=false;
     for(let i=mkProj.length-1;i>=0;i--){ const p=mkProj[i]; p.t+=dt; const k=p.t/MK_DROP_DUR;
       if(k>=1){ mkScene.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh.material.dispose(); mkProj.splice(i,1); mkReveal(); landed=true; haptic('selection'); continue; }
-      const e=k*k;                                                     // ease-in(중력 가속) → 위에서 아래로 떨어짐
+      const e=_easeOutBack(k);                                          // 빠른 ease-out + 살짝 오버슈트 → '딱' 붙는 자석감
       p.mesh.position.set(p.x, p.y0+(p.y1-p.y0)*e, p.z);
-      p.mesh.rotation.x=(1-k)*0.35; p.mesh.rotation.y=(1-k)*0.35;      // 떨어지며 점점 정렬
+      const s=0.82 + 0.18*Math.min(1,e);                                // 작게 시작→정사이즈로 팝(붙는 순간 또렷)
+      p.mesh.scale.setScalar(s);
+      const a=(1-k);                                                    // 회전은 빠르게 0으로 정렬(착 붙음)
+      p.mesh.rotation.x=a*a*0.22; p.mesh.rotation.y=a*a*0.22;
     }
     if(mkPopT>0 && mkMesh){ mkPopT=Math.max(0,mkPopT-dt); mkMesh.scale.setScalar(1+0.12*Math.sin((1-mkPopT/0.6)*Math.PI)); }   // 완성 팝
     if(mkCelebrating){ mkCelebT+=dt; if(mkCelebT>1.3) mkCelebrating=false; }                                                  // 연출 후 진행 재개
@@ -6804,6 +6887,7 @@
   function mkExit(action){ mkActive=false; elMake.classList.remove('show'); mkStopHold(); mkClearProjectiles(); syncMeta(); const cb=mkOnExit; mkOnExit=null; if(cb) cb(action); }
   function mkOpen(cubeReward, onExit){
     if(!DIORAMA_SEQ.length){ if(onExit) onExit('next'); return; }   // 디오라마 없으면 바로 진행
+    if(mkActive) return;                                            // 중복 진입 가드(같은 클리어가 두 번 트리거돼도 1회만)
     mkEnsure(); mkActive=true; mkFinished=false; mkOnExit=onExit; mkCubesLeft=cubeReward|0; mkClearProjectiles();
     mkCelebrating=false; mkCelebT=0; mkPopT=0; document.getElementById('make-complete').classList.remove('show');
     if(META.di>=DIORAMA_SEQ.length) META.di=DIORAMA_SEQ.length-1;
@@ -6879,6 +6963,30 @@
         gunTris: _octoGunGeo&&_octoGunGeo.index ? _octoGunGeo.index.count/3 : 0, pulseMax:OCTO_GUN_PULSE, pulseDur:OCTO_GUN_PULSE_DUR });
       // 옥토퍼스 조준 yaw 검증
       window.__dbgAim = () => slots.map((s,i)=> s&&s.octo ? {i, color:s.color, aimYaw:+(s.octo.userData.aimYaw||0).toFixed(3), rotYDelta:+(s.octo.rotation.y-OCTO.faceY).toFixed(3)} : null);
+      // 회전 슬롯 침범 검증: Y회전 전 구간에서 모델 바닥 최저 화면Y vs 슬롯 octo 머리 최상단 화면Y.
+      window.__dbgClearance = (tiltX=0) => {
+        viewCam.updateMatrixWorld(true);
+        const _p=new THREE.Vector3(); const cr=glCanvas.getBoundingClientRect();
+        let mny=1e9,mxy=-1e9; for(const v of voxels){ mny=Math.min(mny,v.y);mxy=Math.max(mxy,v.y); }
+        const cy=voxelMesh?voxelMesh.userData.cy:(mny+mxy)/2;
+        let mnx=1e9,mnz=1e9,mxx=-1e9,mxz=-1e9; for(const v of voxels){mnx=Math.min(mnx,v.x);mnz=Math.min(mnz,v.z);mxx=Math.max(mxx,v.x);mxz=Math.max(mxz,v.z);}
+        const cx=voxelMesh?voxelMesh.userData.cx:(mnx+mxx)/2, cz=voxelMesh?voxelMesh.userData.cz:(mnz+mxz)/2;
+        // 모델 바운딩의 8 코너를 36개 Y회전각에서 투영 → 최저 화면Y(=NDC 최소)
+        const corners=[]; for(const sx of[mnx,mxx])for(const sy of[mny,mxy])for(const sz of[mnz,mxz])corners.push([sx-cx,sy-cy,sz-cz]);
+        let lowest=-1e9, lowestNDC=1;
+        const ctx=Math.cos(tiltX), stx=Math.sin(tiltX);   // 드래그 틸트(rotation.x) 반영
+        for(let a=0;a<36;a++){ const ang=Math.PI + a*Math.PI*2/36; const ca=Math.cos(ang),sa=Math.sin(ang);
+          for(const c of corners){ let lx=c[0]*ca+c[2]*sa, lz=-c[0]*sa+c[2]*ca, ly=c[1];
+            const ry=ly*ctx - lz*stx, rz=ly*stx + lz*ctx;  // X축 틸트
+            _p.set(lx*modelGroup.scale.x, ry*modelGroup.scale.x+modelGroup.position.y, rz*modelGroup.scale.x); _p.project(viewCam);
+            if(_p.y<lowestNDC){lowestNDC=_p.y; lowest=(-_p.y*0.5+0.5)*DESIGN_H;} } }
+        // 슬롯 octo 머리 최상단 화면Y
+        let octoTop=1e9;
+        for(let i=0;i<SLOTS;i++){ const c=slots[i]; if(c&&c.octo){ c.octo.getWorldPosition(_p); _p.y+=OCTO.scale*1.0; _p.project(viewCam);
+          octoTop=Math.min(octoTop,(-_p.y*0.5+0.5)*DESIGN_H); } }
+        return { modelLowestY:+lowest.toFixed(1), modelLowestNDC:+lowestNDC.toFixed(3), octoHeadTopY:+(octoTop<1e8?octoTop.toFixed(1):0), gap:+((octoTop<1e8?octoTop:0)-lowest).toFixed(1),
+                 mgScale:+modelGroup.scale.x.toFixed(3), mgLiftY:+modelGroup.position.y.toFixed(2) };
+      };
       // 멀티샷 검증: 슬롯의 3 발사구(입/왼총구/오른총구) 월드좌표 + 현재 활성 총알 수.
       window.__dbgMuzzles = (slotIndex=0) => {
         const c=slots[slotIndex]; if(!c||!c.octo||!c.octo.userData.muzzles) return null;
@@ -6886,9 +6994,10 @@
         const ow=new THREE.Vector3(); o.getWorldPosition(ow);
         const muz=o.userData.muzzles;
         const w=muz.map(a=>{ const v=new THREE.Vector3(); a.getWorldPosition(v); return [+v.x.toFixed(3),+v.y.toFixed(3),+v.z.toFixed(3)]; });
-        let active=0; for(const b of BULLET_POOL) if(b.active) active++;
+        let active=0; const bcols={}; for(const b of BULLET_POOL){ if(b.active){ active++; const h=b.mesh.material.color.getHexString(); bcols[h]=(bcols[h]||0)+1; } }
         return { color:c.color, octoWorld:[+ow.x.toFixed(3),+ow.y.toFixed(3),+ow.z.toFixed(3)],
-                 mouth:w[0], gunL:w[1], gunR:w[2], parentSame:muz.map(a=>a.parent===o), scale:+o.scale.x.toFixed(3), activeBullets:active };
+                 muzzleCount:muz.length, gunL:w[0], gunR:w[1], parentSame:muz.map(a=>a.parent===o),
+                 scale:+o.scale.x.toFixed(3), activeBullets:active, bulletColors:bcols, groupColor:GROUP_DISPLAY[c.color] };
       };
       // 검증용: 슬롯 옥토의 화면 좌표(CSS px)와 발사구·총알 위치를 NDC로 반환 → 스크린샷 크롭/검증.
       window.__dbgOctoScreen = (slotIndex=0) => {
@@ -6900,7 +7009,7 @@
         const muz=o.userData.muzzles.map(a=>{ const v=new THREE.Vector3(); a.getWorldPosition(v); return toScreen(v); });
         // 이 색의 활성 총알 화면좌표
         const bul=[]; for(const b of BULLET_POOL){ if(b.active && b.group===c.color){ bul.push(toScreen(b.mesh.position)); } }
-        return { center:toScreen(wp), mouth:muz[0], gunL:muz[1], gunR:muz[2], bullets:bul, color:c.color };
+        return { center:toScreen(wp), muzzleCount:muz.length, gunL:muz[0], gunR:muz[1], bullets:bul, color:c.color };
       };
       // 트레일 길이 검증: 활성 총알들의 리샘플 호 길이(span) 측정 — 속도 무관 고정인지 확인용
       window.__dbgTrail = () => {
@@ -6956,7 +7065,8 @@
         const hf=(GAME_CONFIG.CAMERA_FOV*Math.PI/180)/2, asp=viewCam.aspect;
         const visH=2*camDist*Math.tan(hf), visW=visH*asp;
         return { stage:STAGES[stageIndex].name, camDist:+camDist.toFixed(1), xE,yE,zE, effW:+effW.toFixed(1),
-          fillV:+(yE/visH).toFixed(3), fillW:+(effW/visW).toFixed(3), rotY:+modelGroup.rotation.y.toFixed(4) };
+          fillV:+(yE/visH).toFixed(3), fillW:+(effW/visW).toFixed(3), rotY:+modelGroup.rotation.y.toFixed(4),
+          frame:modelFrameInfo, mgScale:+modelGroup.scale.x.toFixed(3), mgLiftY:+modelGroup.position.y.toFixed(3) };
       };
       // 숫자 정렬 검증용: 옥토퍼스 3D 투영(실제 렌더 위치)와 숫자 span 중심의 화면 픽셀 오차
       window.__dbgNumAlign = () => {
