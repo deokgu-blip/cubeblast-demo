@@ -5093,20 +5093,18 @@
             const ry=y*ctx - lz0*stx, rz=y*stx + lz0*ctx;
             _cp.set(lx*scale, ry*scale+lift, rz*scale); _cp.project(viewCam); if (_cp.y>hi) hi=_cp.y;
           } } } return hi; };
-      const liftToClear = (scale) => {
-        if (lowestNDC(0,scale) >= clearNDC && highestNDC(0,scale) <= 0.97) return 0;
-        let lo=0, hi=halfY*scale*2 + 6;
-        for (let it=0; it<22; it++){ const mid=(lo+hi)/2;
-          if (lowestNDC(mid,scale) >= clearNDC && highestNDC(mid,scale) <= 0.97) hi=mid; else lo=mid; }
-        let lift=hi;
-        if (highestNDC(lift,scale) > 0.97){ let l2=0, h2=lift;
-          for (let it=0; it<18; it++){ const mid=(l2+h2)/2; if (highestNDC(mid,scale)<=0.97) l2=mid; else h2=mid; } lift=l2; }
-        return lift; };
-      let scale=fitScale, lift=liftToClear(scale);
-      for (let it=0; it<26; it++){   // 클리어 안 되면(너무 큼) 축소 후 재-리프트
-        if (lowestNDC(lift,scale) >= clearNDC && highestNDC(lift,scale) <= 0.97) break;
-        scale *= 0.96; if (scale <= SCALE_FLOOR){ scale=SCALE_FLOOR; lift=liftToClear(scale); break; }
-        lift = liftToClear(scale);
+      // 모델 최저점(회전·틸트 스윕)을 정확히 clearNDC(슬롯 머리 바로 위 선)에 맞춘다 — 위/아래 둘 다 이동(음수 lift 허용)
+      // 해서 작은 모델도 위에 둥 뜨지 않고 슬롯 바로 위까지 내려온다. 스윕이 최악 회전각을 포함 → 어떤 각도로 돌아도 침범 X.
+      const fitClearance = (scale) => {
+        let lo=-(halfY*scale*2 + 8), hi=(halfY*scale*2 + 8);   // 음수=아래로 내림
+        for (let it=0; it<26; it++){ const mid=(lo+hi)/2;
+          if (lowestNDC(mid,scale) >= clearNDC) hi=mid; else lo=mid; }   // 최저점 ≈ clearNDC
+        return hi; };
+      let scale=fitScale, lift=fitClearance(scale);
+      for (let it=0; it<26; it++){   // 슬롯 바로 위에 맞춘 뒤 위로 넘치면(top>0.97) 축소하고 다시 맞춤
+        if (highestNDC(lift,scale) <= 0.97) break;
+        scale *= 0.96; if (scale <= SCALE_FLOOR){ scale=SCALE_FLOOR; lift=fitClearance(scale); break; }
+        lift = fitClearance(scale);
       }
       player.zoom = camDist;
       modelGroup.position.set(0, lift, 0);
