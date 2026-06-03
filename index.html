@@ -27,22 +27,24 @@
   .iconbtn:active{transform:translateY(3px);box-shadow:0 1px 0 #b81f1f,0 3px 5px rgba(8,40,80,.3),inset 0 2px 0 rgba(255,255,255,.5);}
   #gear{background:linear-gradient(180deg,#ff5b5b,#e23b3b);}
   #gear svg{width:30px;height:30px;fill:#fff;}
-  /* 컬렉션 버튼: 보라톤 + 트로피 */
-  #collbtn{background:linear-gradient(180deg,#8e7bff,#6a4fe0);box-shadow:0 4px 0 #4a32b0,0 6px 9px rgba(8,40,80,.35),inset 0 2px 0 rgba(255,255,255,.5);}
-  #collbtn:active{box-shadow:0 1px 0 #4a32b0,0 3px 5px rgba(8,40,80,.3),inset 0 2px 0 rgba(255,255,255,.5);}
-  #collbtn .ic{font-size:26px;line-height:1;filter:drop-shadow(0 1px 1px rgba(0,0,0,.3));}
+  /* 컬렉션 버튼: 좌측 상단, 레퍼런스 우측 프로필 버튼급 라운드 사각(보라톤) */
+  #collbtn{position:absolute;left:14px;top:calc(70px + env(safe-area-inset-top));z-index:8;
+        display:flex;align-items:center;gap:8px;height:50px;padding:0 16px 0 9px;border:none;cursor:pointer;
+        border-radius:16px;background:linear-gradient(180deg,#8e7bff,#6a4fe0);
+        box-shadow:0 4px 0 #4a32b0,0 6px 9px rgba(8,40,80,.35),inset 0 2px 0 rgba(255,255,255,.45);}
+  #collbtn:active{transform:translateY(3px);box-shadow:0 1px 0 #4a32b0,0 3px 5px rgba(8,40,80,.3),inset 0 2px 0 rgba(255,255,255,.45);}
+  #collbtn .ic{width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.18);
+        display:flex;align-items:center;justify-content:center;font-size:20px;line-height:1;}
+  #collbtn .lb{font-family:'BlackHanSans','Jua',sans-serif;font-size:17px;color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.3);}
 
   /* ===== 홈: 현재 디오라마 3D ===== */
   .view{position:absolute;left:0;right:0;top:0;bottom:0;z-index:2;display:none;}
   .view.active{display:block;}
   #homecv{position:absolute;left:0;top:0;width:100%;height:100%;z-index:1;display:block;}
-  /* 현재 디오라마 정보(이름 + 진행%) — PLAY 바로 위 */
-  #curInfo{position:absolute;left:50%;transform:translateX(-50%);bottom:228px;z-index:6;text-align:center;
-           color:#fff;text-shadow:0 2px 0 rgba(8,40,80,.55),0 3px 6px rgba(0,0,0,.35);pointer-events:none;}
-  #curName{font-family:'BlackHanSans','Jua',sans-serif;font-size:24px;letter-spacing:.5px;}
-  #curProg{font-family:'Jua',sans-serif;font-size:14px;opacity:.92;margin-top:2px;}
+  /* 현재 디오라마 진행바 — PLAY 바로 위 (이름/설명 텍스트는 제거) */
+  #curInfo{position:absolute;left:50%;transform:translateX(-50%);bottom:212px;z-index:6;text-align:center;pointer-events:none;}
   /* 진행바 */
-  #curBarWrap{width:188px;height:12px;margin:7px auto 0;border-radius:7px;background:rgba(8,20,42,.5);
+  #curBarWrap{width:188px;height:12px;margin:0 auto;border-radius:7px;background:rgba(8,20,42,.5);
               box-shadow:inset 0 1px 3px rgba(0,0,0,.4);overflow:hidden;}
   #curBar{height:100%;width:0;border-radius:7px;background:linear-gradient(180deg,#ffe06a,#ffb931);transition:width .35s;}
 
@@ -66,11 +68,21 @@
   #collBack svg{width:24px;height:24px;fill:#fff;}
   #collTitle{font-family:'BlackHanSans','Jua',sans-serif;font-size:20px;color:#fff;text-shadow:0 2px 0 rgba(8,40,80,.5);}
   #collScroll{flex:1 1 auto;position:relative;overflow:hidden;touch-action:none;}
-  #podLayer{position:absolute;left:0;top:0;width:100%;will-change:transform;}
-  .pod{position:absolute;border-radius:50%;
-       background:radial-gradient(ellipse at center, rgba(0,0,0,.36) 0%, rgba(0,0,0,.18) 44%, rgba(0,0,0,0) 72%);}
-  #collcv{position:absolute;inset:0;width:100%;height:100%;z-index:3;pointer-events:none;}
-  .podname{position:absolute;text-align:center;font-size:12px;font-weight:800;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.5);}
+  #collcv{position:absolute;inset:0;width:100%;height:100%;z-index:2;pointer-events:none;}
+  /* 좌우 화살표 */
+  .collArrow{position:absolute;top:50%;transform:translateY(-50%);width:54px;height:54px;border-radius:50%;
+        border:none;cursor:pointer;z-index:5;display:flex;align-items:center;justify-content:center;
+        background:rgba(8,18,38,0.5);box-shadow:0 3px 0 rgba(0,0,0,.25),inset 0 2px 0 rgba(255,255,255,.25);}
+  .collArrow svg{width:30px;height:30px;fill:#fff;}
+  .collArrow:active{transform:translateY(-50%) scale(.92);}
+  .collArrow.off{opacity:0;pointer-events:none;}
+  #collPrev{left:10px;}#collNext{right:10px;}
+  /* 디오라마 이름 + 인덱스 */
+  #collName{position:absolute;left:0;right:0;bottom:60px;text-align:center;z-index:5;pointer-events:none;
+        font-family:'BlackHanSans','Jua',sans-serif;font-size:26px;color:#fff;
+        text-shadow:0 2px 0 rgba(8,40,80,.55),0 3px 6px rgba(0,0,0,.4);}
+  #collCount{position:absolute;left:0;right:0;bottom:34px;text-align:center;z-index:5;pointer-events:none;
+        font-family:'Jua',sans-serif;font-size:15px;color:#fff;opacity:.9;text-shadow:0 1px 3px rgba(0,0,0,.5);}
   #collEmpty{position:absolute;left:0;right:0;top:46%;transform:translateY(-50%);text-align:center;color:#fff;
              text-shadow:0 2px 0 rgba(8,40,80,.5);display:none;}
   #collEmpty .ic{font-size:54px;}#collEmpty .t{font-size:16px;font-weight:900;margin-top:8px;}
@@ -87,28 +99,33 @@
   <div id="top" data-edit-id="lobby-top">
     <div id="coinbar" data-edit-id="lobby-coinbar"><span class="ci" data-edit-id="lobby-coin-icon"></span><span id="coinval" data-edit-id="lobby-coinval">0</span></div>
     <div id="topR">
-      <button id="collbtn" class="iconbtn" data-edit-id="lobby-collbtn" aria-label="컬렉션"><span class="ic">🏆</span></button>
       <button id="gear" class="iconbtn" data-edit-id="lobby-gear" aria-label="설정"><svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg></button>
     </div>
   </div>
+
+  <!-- 좌측 컬렉션 버튼 -->
+  <button id="collbtn" data-edit-id="lobby-collbtn" aria-label="컬렉션"><span class="ic">🖼️</span><span class="lb">컬렉션</span></button>
 
   <!-- 홈: 현재 디오라마 3D -->
   <div id="homeView" class="view active">
     <canvas id="homecv"></canvas>
     <div id="curInfo">
-      <div id="curName">—</div>
-      <div id="curProg"></div>
       <div id="curBarWrap"><div id="curBar"></div></div>
     </div>
   </div>
 
-  <!-- 컬렉션 페이지 -->
+  <!-- 컬렉션 페이지 (캐러셀: 한 화면에 1개씩 크게) -->
   <div id="collView" class="view">
     <div id="collHdr">
       <button id="collBack" aria-label="뒤로"><svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg></button>
-      <div id="collTitle">🏆 컬렉션</div>
+      <div id="collTitle">🖼️ 컬렉션</div>
     </div>
-    <div id="collScroll"><div id="podLayer"></div><canvas id="collcv"></canvas>
+    <div id="collScroll">
+      <canvas id="collcv"></canvas>
+      <button id="collPrev" class="collArrow" aria-label="이전"><svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg></button>
+      <button id="collNext" class="collArrow" aria-label="다음"><svg viewBox="0 0 24 24"><path d="M8.59 16.59 10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg></button>
+      <div id="collName"></div>
+      <div id="collCount"></div>
       <div id="collEmpty"><div class="ic">📦</div><div class="t">아직 완성한 디오라마가 없어요</div><div class="s">디오라마를 완성하면 여기에 모여요</div></div>
     </div>
   </div>
@@ -214,18 +231,17 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
     g.position.set(0, hGH*0.03, 0);    // 살짝 위로(이름/PLAY 공간)
     g.rotation.x=-0.12;
     hS.add(g); hGroup=g;
-    // 정보 텍스트
+    // 진행바만 (디오라마 이름/설명 텍스트는 제거)
     const pct=vd.total? Math.round(filled/vd.total*100):0;
-    document.getElementById('curName').textContent=d.name;
-    document.getElementById('curProg').textContent=filled+' / '+vd.total+'  ('+pct+'%)';
     document.getElementById('curBar').style.width=pct+'%';
   }
 
-  // ====== 컬렉션 페이지 ======
-  const collScroll=document.getElementById('collScroll'), podLayer=document.getElementById('podLayer'), ccv=document.getElementById('collcv');
+  // ====== 컬렉션 페이지 (캐러셀: 한 화면에 완성 디오라마 1개씩 크게) ======
+  const collScroll=document.getElementById('collScroll'), ccv=document.getElementById('collcv');
   const collEmpty=document.getElementById('collEmpty');
-  const COLS=2;
-  let cR,cS,cC,cRAF,cItems=[],CGW=360,CGH=360,CCELL=150,CROW=150,cScrollY=0,cMax=0,pods=[];
+  const collName=document.getElementById('collName'), collCount=document.getElementById('collCount');
+  const collPrev=document.getElementById('collPrev'), collNext=document.getElementById('collNext');
+  let cR,cS,cC,cRAF,CGW=360,CGH=480,cIdx=0,cDone=0,cCur=null,cAnim=null;
   function cEnsure(){
     if(cR) return;
     cR=new THREE.WebGLRenderer({canvas:ccv,antialias:true,alpha:true});
@@ -238,45 +254,54 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
     cS.add(new THREE.AmbientLight(0xffffff,0.32));
     const dl=new THREE.DirectionalLight(0xffffff,0.92); dl.position.set(0.5,1.1,1.2); cS.add(dl);
     (function loop(){ cRAF=requestAnimationFrame(loop); if(!views.coll.classList.contains('active'))return;
-      for(const it of cItems) it.rotation.y-=0.011; cS.position.y=cScrollY; cR.render(cS,cC); })();
+      if(cCur) cCur.g.rotation.y-=0.011;
+      if(cAnim){ const k=Math.min(1,(performance.now()-cAnim.t0)/cAnim.dur), e=1-Math.pow(1-k,3);
+        cAnim.nu.g.position.x=cAnim.dir*CGW*(1-e);
+        if(cAnim.old) cAnim.old.g.position.x=-cAnim.dir*CGW*e;
+        if(k>=1){ if(cAnim.old) disposeItem(cAnim.old); cAnim=null; } }
+      cR.render(cS,cC); })();
   }
-  function podSeat(i){ const col=i%COLS,row=Math.floor(i/COLS);
-    const cx=CGW*(col+0.5)/COLS, top=18+row*CROW; return {cx,top,seatY:top+CCELL*0.62}; }
+  function disposeItem(it){ if(!it)return; cS.remove(it.g);
+    it.g.traverse(o=>{ if(o.geometry)o.geometry.dispose(); if(o.material&&o.material.dispose)o.material.dispose(); }); }
+  function makeItem(idx){ const d=DIORAMAS[idx],vd=voxOf(d);
+    const sc=Math.min((0.74*CGW)/vd.ext,(0.60*CGH)/vd.hy);
+    const g=new THREE.Group(); g.add(makeSolid(d,vd.total)); g.scale.setScalar(sc);
+    g.position.set(0, CGH*0.04, 0); g.rotation.x=-0.10; cS.add(g);
+    return {g,idx}; }
+  function updateChrome(){
+    if(cDone<=0){ collName.textContent=''; collCount.textContent=''; return; }
+    collName.textContent=DIORAMAS[cIdx].name;
+    collCount.textContent=(cIdx+1)+' / '+cDone;
+    collPrev.classList.toggle('off', cIdx<=0);
+    collNext.classList.toggle('off', cIdx>=cDone-1);
+  }
+  function gotoIdx(n){ n=clamp(n,0,cDone-1);
+    if(!cCur){ cIdx=n; cCur=makeItem(n); updateChrome(); return; }
+    if(n===cIdx||cAnim) return;
+    const dir=n>cIdx?1:-1, old=cCur, nu=makeItem(n); nu.g.position.x=dir*CGW;
+    cIdx=n; cCur=nu; cAnim={old,nu,dir,t0:performance.now(),dur:300}; updateChrome(); }
   function buildColl(){
     cEnsure();
     CGW=collScroll.clientWidth; CGH=collScroll.clientHeight;
-    CCELL=(CGW/COLS)*0.72; CROW=(CGW/COLS)*1.0;
-    // 완성한 디오라마 = di < META.di (현재 제작중은 제외)
-    const done=Math.max(0, Math.min(META.di, DIORAMAS.length));
-    collEmpty.style.display = done>0 ? 'none' : 'block';
-    const rows=Math.ceil(Math.max(done,1)/COLS);
-    while(pods.length<done){ const p=document.createElement('div'); p.className='pod'; const nm=document.createElement('div'); nm.className='podname';
-      podLayer.appendChild(p); podLayer.appendChild(nm); pods.push({p,nm}); }
-    for(let i=0;i<pods.length;i++){ const show=i<done;
-      pods[i].p.style.display=show?'':'none'; pods[i].nm.style.display=show?'':'none';
-      if(!show) continue;
-      const s=podSeat(i); const shW=CCELL*0.58, shH=CCELL*0.18;
-      pods[i].p.style.width=shW+'px'; pods[i].p.style.height=shH+'px';
-      pods[i].p.style.left=(s.cx-shW/2)+'px'; pods[i].p.style.top=(s.seatY-shH*0.35)+'px';
-      pods[i].nm.style.left=(s.cx-CCELL/2)+'px'; pods[i].nm.style.width=CCELL+'px'; pods[i].nm.style.top=(s.seatY+CCELL*0.46)+'px';
-      pods[i].nm.textContent=DIORAMAS[i].name; }
-    podLayer.style.height=(18+rows*CROW+40)+'px';
     cR.setPixelRatio(Math.min(2,devicePixelRatio||1)); cR.setSize(CGW,CGH,false);
     cC.left=-CGW/2;cC.right=CGW/2;cC.top=CGH/2;cC.bottom=-CGH/2;cC.updateProjectionMatrix();
-    cItems.forEach(g=>{ cS.remove(g); g.traverse(o=>{ if(o.geometry)o.geometry.dispose(); if(o.material&&o.material.dispose)o.material.dispose(); }); }); cItems=[];
-    for(let i=0;i<done;i++){ const d=DIORAMAS[i],vd=voxOf(d);
-      const s=podSeat(i), wx=s.cx-CGW/2, wy=CGH/2-s.seatY;
-      const sc=Math.min((0.82*CCELL)/vd.ext,(0.92*CROW)/vd.hy);
-      const g=new THREE.Group(); g.add(makeSolid(d,vd.total)); g.scale.setScalar(sc);
-      g.position.set(wx, wy+sc*vd.hy/2, 0); cS.add(g); cItems.push(g); }
-    cMax=Math.max(0,(18+rows*CROW+40)-CGH); setCScroll(cScrollY);
+    // 완성한 디오라마 = di < META.di (현재 제작중은 제외)
+    cDone=Math.max(0, Math.min(META.di, DIORAMAS.length));
+    const has=cDone>0;
+    collEmpty.style.display=has?'none':'block';
+    collName.style.display=has?'':'none'; collCount.style.display=has?'':'none';
+    collPrev.style.display=has?'':'none'; collNext.style.display=has?'':'none';
+    if(cAnim){ disposeItem(cAnim.old); cAnim=null; }
+    if(cCur){ disposeItem(cCur); cCur=null; }
+    if(!has){ updateChrome(); return; }
+    cIdx=clamp(cIdx,0,cDone-1); cCur=makeItem(cIdx); updateChrome();
   }
-  function setCScroll(y){ cScrollY=clamp(y,0,cMax); podLayer.style.transform='translateY('+(-cScrollY)+'px)'; }
-  (function(){ let drag=false,last=0;
-    collScroll.addEventListener('pointerdown',e=>{drag=true;last=e.clientY;});
-    window.addEventListener('pointermove',e=>{ if(!drag||curView!=='coll')return; setCScroll(cScrollY-(e.clientY-last)); last=e.clientY; });
-    window.addEventListener('pointerup',()=>drag=false);
-    collScroll.addEventListener('wheel',e=>{ setCScroll(cScrollY+e.deltaY*0.5); e.preventDefault(); },{passive:false});
+  collPrev.onclick=()=>gotoIdx(cIdx-1);
+  collNext.onclick=()=>gotoIdx(cIdx+1);
+  (function(){ let drag=false,x0=0,moved=0;
+    collScroll.addEventListener('pointerdown',e=>{drag=true;x0=e.clientX;moved=0;});
+    window.addEventListener('pointermove',e=>{ if(!drag||curView!=='coll')return; moved=e.clientX-x0; });
+    window.addEventListener('pointerup',()=>{ if(!drag)return; drag=false; if(Math.abs(moved)>45) gotoIdx(cIdx+(moved<0?1:-1)); });
   })();
 
   // ====== 뷰 전환 (home / coll) ======
@@ -288,8 +313,11 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
     if(!views[v]) v='home';
     curView=v;
     for(const k in views) views[k].classList.toggle('active', k===v);
-    play.classList.toggle('hide', v!=='home');
-    document.getElementById('curInfo').style.display = v==='home' ? '' : 'none';
+    const home = v==='home';
+    play.classList.toggle('hide', !home);
+    document.getElementById('curInfo').style.display = home ? '' : 'none';
+    document.getElementById('top').style.display = home ? '' : 'none';
+    document.getElementById('collbtn').style.display = home ? '' : 'none';
     if(v==='coll') buildColl();
     else buildHome();
   }

@@ -8,27 +8,16 @@
 
   // 편집 대상 트리(분해 단위). @로 시작=가상(배경 등 CSS 변수).
   const TREE = [
-    {grp:'상단(코인/설정)', items:[
+    {grp:'상단(코인/컬렉션/설정)', items:[
       {id:'lobby-top',      label:'상단바 전체'},
       {id:'lobby-coinbar',  label:'· 코인바 전체'},
       {id:'lobby-coin-icon',label:'·· 코인 아이콘', img:true},
       {id:'lobby-coinval',  label:'·· 코인 숫자', font:true},
+      {id:'lobby-collbtn',  label:'· 컬렉션 버튼', img:true},
       {id:'lobby-gear',     label:'· 설정(기어)', img:true},
     ]},
-    {grp:'플레이/길', items:[
+    {grp:'플레이', items:[
       {id:'lobby-play',     label:'플레이 버튼', img:true},
-    ]},
-    {grp:'하단 탭바', items:[
-      {id:'lobby-nav',           label:'탭바 전체'},
-      {id:'lobby-tab-shop',      label:'· 상점 탭'},
-      {id:'lobby-tab-shop-icon', label:'·· 상점 아이콘', img:true},
-      {id:'lobby-tab-shop-label',label:'·· 상점 라벨', font:true},
-      {id:'lobby-tab-home',      label:'· 시작 탭'},
-      {id:'lobby-tab-home-icon', label:'·· 시작 아이콘', img:true},
-      {id:'lobby-tab-home-label',label:'·· 시작 라벨', font:true},
-      {id:'lobby-tab-lock',      label:'· 잠금 탭'},
-      {id:'lobby-tab-lock-icon', label:'·· 잠금 아이콘', img:true},
-      {id:'lobby-tab-lock-label',label:'·· 잠금 라벨', font:true},
     ]},
     {grp:'배경', items:[
       {id:'@lobby-bg', label:'로비 배경 이미지', img:true, bgvar:'--bg2'},
