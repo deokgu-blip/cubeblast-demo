@@ -53,6 +53,13 @@
   @keyframes bob{0%,100%{transform:translateX(-50%) translateY(0);}50%{transform:translateX(-50%) translateY(-5px);}}
   #curtag{position:absolute;left:50%;transform:translateX(-50%);margin-top:-2px;
           background:#13315c;color:#fff;font-weight:800;font-size:11px;padding:3px 9px;border-radius:9px;white-space:nowrap;}
+  /* 5스테이지마다 우측 코인 보상 배지 */
+  .coinrew{position:absolute;left:calc(50% + 56px);display:flex;align-items:center;gap:4px;
+           background:rgba(8,20,42,.55);border:2px solid rgba(255,212,94,.5);border-radius:13px;padding:3px 10px 3px 5px;
+           font-family:'BlackHanSans','Jua',sans-serif;font-size:14px;color:#ffd45e;text-shadow:0 1px 2px rgba(0,0,0,.5);white-space:nowrap;}
+  .coinrew .rc{width:18px;height:18px;border-radius:50%;flex:0 0 auto;
+           background:radial-gradient(circle at 35% 30%, #ffe08a, #f5b417 70%, #d68f00);box-shadow:0 1px 2px rgba(0,0,0,.35);}
+  .coinrew.got{opacity:.45;filter:grayscale(.3);}
 
   /* ===== 상점 탭: 디오라마 컬렉션 ===== */
   #shopScroll{position:absolute;inset:0;overflow:hidden;touch-action:none;}
@@ -199,27 +206,25 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
     pathH = TOP_PAD + (N-1)*NODE_GAP + BOT_PAD;
     pathInner.style.height=pathH+'px';
     const yOf=i=> pathH - BOT_PAD - i*NODE_GAP;     // 노드 i 중심 y (1=하단)
-    for(let i=0;i<N-1;i++){
-      const y0=yOf(i),y1=yOf(i+1),seg=document.createElement('div');
-      seg.className='seg'+(i<META.di?' done':'');
-      seg.style.top=Math.min(y0,y1)+'px'; seg.style.height=(Math.abs(y0-y1)+2)+'px';
-      pathInner.appendChild(seg);
-    }
+    // 연결선(노란선) 제거 — 육각 노드만 표시
     for(let i=0;i<N;i++){
-      const y=yOf(i), state=i<META.di?'done':(i===META.di?'cur':'lock');
+      const y=yOf(i), lvl=i+1, state=i<META.di?'done':(i===META.di?'cur':'lock');
       const el=document.createElement('div'); el.className='node '+state;
       const h=(state==='cur')?92:77;
       el.style.top=(y-h/2)+'px';
-      el.innerHTML='<span class="num">'+(i+1)+'</span>';
+      el.innerHTML='<span class="num">'+lvl+'</span>';
       if(state!=='lock') el.onclick=startGame;
       pathInner.appendChild(el);
       if(state==='cur'){ const tag=document.createElement('div'); tag.id='curtag'; tag.textContent=DIORAMAS[i].name;
         tag.style.top=(y+h/2-2)+'px'; pathInner.appendChild(tag); }
+      // 5스테이지마다 우측에 '클리어 시 코인 보상' UI
+      if(lvl%5===0){ const rw=document.createElement('div'); rw.className='coinrew'+(i<META.di?' got':'');
+        rw.style.top=(y-15)+'px'; rw.innerHTML='<span class="rc"></span>+'+((lvl/5)*100); pathInner.appendChild(rw); }
     }
     layoutHome();
-    // 현재 노드를 화면 하단쪽(60%)에 오도록 스크롤
+    // 현재 노드를 화면 위쪽(45%)에 오도록 스크롤(시작점 더 위로)
     const curY=yOf(META.di), vh=homeScroll.clientHeight;
-    setPScroll(curY - vh*0.62);
+    setPScroll(curY - vh*0.45);
   }
   function layoutHome(){ pMax=Math.max(0, pathH - homeScroll.clientHeight); setPScroll(pScrollY); }
   function setPScroll(y){ pScrollY=clamp(y,0,pMax); pathInner.style.transform='translateY('+(-pScrollY)+'px)'; }
