@@ -16,8 +16,17 @@
       {id:'lobby-collbtn',  label:'· 컬렉션 버튼', img:true},
       {id:'lobby-gear',     label:'· 설정(기어)', img:true},
     ]},
-    {grp:'플레이', items:[
+    {grp:'플레이/진행', items:[
       {id:'lobby-play',     label:'플레이 버튼', img:true},
+      {id:'lobby-progress', label:'디오라마 진행바', img:true},
+    ]},
+    {grp:'컬렉션 페이지', items:[
+      {id:'lobby-coll-back', label:'뒤로 버튼', img:true},
+      {id:'lobby-coll-title',label:'컬렉션 제목', font:true},
+      {id:'lobby-coll-prev', label:'이전 화살표', img:true},
+      {id:'lobby-coll-next', label:'다음 화살표', img:true},
+      {id:'lobby-coll-name', label:'디오라마 이름', font:true},
+      {id:'lobby-coll-count',label:'카운터', font:true},
     ]},
     {grp:'배경', items:[
       {id:'@lobby-bg', label:'로비 배경 이미지', img:true, bgvar:'--bg2'},
@@ -78,7 +87,15 @@
     hR.addEventListener('pointerup',()=>rt=null);
     document.body.appendChild(outline);
   }
-  function select(item){ sel=item; ensureOutline(); outlineUpdate(); buildBar(); }
+  // 컬렉션 페이지 요소(lobby-coll-*)는 #collView 가 숨겨져 있으면 편집 불가 → 선택 시 임시로 해당 뷰를 표시.
+  function ensureViewFor(id){
+    const coll=document.getElementById('collView'), home=document.getElementById('homeView');
+    if(!coll||!home) return;
+    const wantColl = /^lobby-coll-/.test(id);
+    if(wantColl && !coll.classList.contains('active')){ home.classList.remove('active'); coll.classList.add('active'); }
+    else if(!wantColl && coll.classList.contains('active') && id!=='@lobby-bg'){ coll.classList.remove('active'); home.classList.add('active'); }
+  }
+  function select(item){ sel=item; ensureViewFor(item.id); ensureOutline(); requestAnimationFrame(()=>outlineUpdate()); buildBar(); }
   function syncBar(){ if(!bar||!sel)return; const o=obj(sel.id); bar.querySelectorAll('input.ed-range,input.ed-num2').forEach(s=>{ const k=s.dataset.k; if(!k)return; s.value=(o[k]!=null?o[k]:(k==='scale'?1:0)); }); }
   function treeDots(){ if(!treeWrap)return; treeWrap.querySelectorAll('.ed-tree-item').forEach(b=>{ const d=b.querySelector('.ed-tree-dot'); if(d)d.classList.toggle('on',hasOv(obj(b.dataset.id))); }); }
   function buildTree(){ if(!treeWrap)treeWrap=el('div','ed-tree'); treeWrap.innerHTML='';

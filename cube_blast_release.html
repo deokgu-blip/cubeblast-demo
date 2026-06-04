@@ -3855,6 +3855,8 @@
   /* 큐 뒤 2줄(대기열) 숫자: 흐리게(반투명 회색) — 다음 차례(윗줄)와 시각적으로 구분 */
   .octo-num.qnum.qdim { font-size:14px; color:rgba(214,222,234,.55);
     text-shadow:0 1px 0 rgba(0,0,0,.30), 0 0 3px rgba(0,0,0,.30); }
+  /* 숫자 글자(에디터 편집 대상). 부모(.octo-num)가 화면 위치/중심정렬을 맡고, 이 span 이 폰트/오프셋 오버라이드를 받음. */
+  .octo-num-inner { display:inline-block; color:inherit; font:inherit; line-height:inherit; text-shadow:inherit; }
 
   /* ---- 스프링 파워업 6번째 슬롯(슬롯 row 좌측, 약간의 간격) ---- */
   #slot-extra {
@@ -3996,10 +3998,15 @@
   .qfade { opacity:.45; }
 
   /* ---- Power-ups ---- */
+  /* 하단 4개 아이템이 올라가는 흰색 트레이 배경(독립 조절용 — 에디터에서 크기/이미지 변경 가능) */
+  #pu-tray {
+    position:absolute; left:0; right:0; bottom:0; height:104px; z-index:8; pointer-events:none;
+    background:linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,.9) 38%);
+    background-size:100% 100%; background-repeat:no-repeat; transform-origin:bottom center;
+  }
   #powerups {
     position:absolute; left:0; right:0; bottom:0; height:104px;
     display:flex; gap:14px; justify-content:center; align-items:center; z-index:9;
-    background:linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,.9) 38%);
   }
   /* 파워업 슬롯 — 브롤 글로시 라운드 프레임(호스트 pu_base 없을 때 폴백) */
   .pu { width:62px; height:62px; position:relative; pointer-events:auto; border-radius:17px;
@@ -4272,6 +4279,7 @@
     <div id="octo-nums"></div>
     <div id="queue-row"></div>
 
+    <div id="pu-tray" data-edit-id="pu-tray"></div>
     <div id="powerups" data-edit-id="powerups"></div>
 
     <!-- 파워업 활성 시 전체 dim. 그 위로 클릭 가능한 리소스(3D는 보조 캔버스, DOM은 z-index 리프트)가 표시됨. -->
@@ -4298,11 +4306,11 @@
     <div id="result-overlay"><div class="msg" id="result-msg"></div></div>
     <div id="clear-overlay">
       <div id="clear-confetti"></div>
-      <div id="clear-title">Well Done!</div>
+      <div id="clear-title" data-edit-id="clear-title">Well Done!</div>
       <div id="clear-footer">
-        <div id="clear-blocks"><span class="block-bigicon"></span><span class="block-val" id="clear-block-val">+0</span></div>
-        <div id="clear-coin"><span class="coin-bigicon"></span><span class="coin-val" id="clear-coin-val">+0</span></div>
-        <div id="clear-tap">Tap to Next Stage</div>
+        <div id="clear-blocks" data-edit-id="clear-blocks"><span class="block-bigicon" data-edit-id="clear-block-icon"></span><span class="block-val" id="clear-block-val" data-edit-id="clear-block-val">+0</span></div>
+        <div id="clear-coin" data-edit-id="clear-coin"><span class="coin-bigicon" data-edit-id="clear-coin-icon"></span><span class="coin-val" id="clear-coin-val" data-edit-id="clear-coin-val">+0</span></div>
+        <div id="clear-tap" data-edit-id="clear-tap">Tap to Next Stage</div>
       </div>
     </div>
     <div id="loading">Loading…</div>
@@ -5402,11 +5410,20 @@
     recomputeSlotXs();   // 슬롯 DOM 레이아웃 후 옥토퍼스 정렬 X 계산
     applySlotRow();      // 슬롯 줄 위치/간격(에디터 조절) 적용 (기본값이면 무변화)
   }
+  // octo-num: 바깥 div 는 게임이 매 프레임 left/top 으로 화면투영 위치를 잡고 transform:translate(-50%,-50%)로 중심정렬.
+  // 그 안의 .octo-num-inner(data-edit-id) 가 에디터의 위치/크기/회전/폰트 오버라이드를 받는다(중심정렬을 깨지 않음).
+  function mkOctoNum(cls, editId){
+    const s=document.createElement('div'); s.className=cls;
+    const inner=document.createElement('span'); inner.className='octo-num-inner'; inner.setAttribute('data-edit-id',editId);
+    s.appendChild(inner); s._inner=inner;
+    return s;
+  }
+  function setOctoNumText(s, val){ if(s && s._inner && s._inner.textContent!=String(val)) s._inner.textContent=val; }
   function buildOctoNums(){
     elNums.innerHTML=''; numSpans.length=0; queueNumSpans.length=0;
-    for (let i=0;i<SLOTS;i++){ const s=document.createElement('div'); s.className='octo-num'; elNums.appendChild(s); numSpans.push(s); }
-    extraSpan=document.createElement('div'); extraSpan.className='octo-num'; elNums.appendChild(extraSpan);
-    for (let i=0;i<QUEUE.cols*QUEUE.rowsPer;i++){ const s=document.createElement('div'); s.className='octo-num qnum'; elNums.appendChild(s); queueNumSpans.push(s); }
+    for (let i=0;i<SLOTS;i++){ const s=mkOctoNum('octo-num','octo-num-slot'); elNums.appendChild(s); numSpans.push(s); }
+    extraSpan=mkOctoNum('octo-num','octo-num-slot'); elNums.appendChild(extraSpan);
+    for (let i=0;i<QUEUE.cols*QUEUE.rowsPer;i++){ const s=mkOctoNum('octo-num qnum','octo-num-queue'); elNums.appendChild(s); queueNumSpans.push(s); }
   }
   function cannonInner(c){ return '<span>'+c.bullets+'</span>'; }
   // 그룹의 CSS 색(#rrggbb) = 이 스테이지 실제 복셀색(재매핑 반영). 폴백: 전역 GROUP_DISPLAY.
@@ -5455,7 +5472,7 @@
         s.style.display='block';
         s.style.left=((_vp.x*0.5+0.5)*DESIGN_W).toFixed(1)+'px';
         s.style.top=((-_vp.y*0.5+0.5)*DESIGN_H).toFixed(1)+'px';
-        if (s.textContent!=String(c.bullets)) s.textContent=c.bullets;
+        setOctoNumText(s, c.bullets);
       } else {
         s.style.display='none';
       }
@@ -5466,7 +5483,7 @@
         extraSpan.style.display='block';
         extraSpan.style.left=((_vp.x*0.5+0.5)*DESIGN_W).toFixed(1)+'px';
         extraSpan.style.top=((-_vp.y*0.5+0.5)*DESIGN_H).toFixed(1)+'px';
-        extraSpan.textContent=extraCannon.bullets;
+        setOctoNumText(extraSpan, extraCannon.bullets);
       } else { extraSpan.style.display='none'; }
       // 6번째 슬롯 DOM 위치를 extraCannon 옥토퍼스 위치에 맞춰 동기화(z-index:-1로 옥토퍼스 뒤에 표시)
       const sx=document.getElementById('slot-extra');
@@ -5495,7 +5512,7 @@
         const dim=q.row>=1;
         if (dim){ if (!s.classList.contains('qdim')) s.classList.add('qdim'); }
         else if (s.classList.contains('qdim')) s.classList.remove('qdim');
-        if (s.textContent!=String(item.bullets)) s.textContent=item.bullets;
+        setOctoNumText(s, item.bullets);
       } else { s.style.display='none'; }
     }
   }
@@ -5529,7 +5546,7 @@
       if (unlocked && !used){
         html+='<div class="pu-badge" data-edit-id="pu-badge-'+p.id+'">'+(badgeSrc?'<img src="'+badgeSrc+'" alt="">':'')+'<span>1</span></div>';
       } else if (!unlocked){
-        html+='<div class="pu-lv">LV '+p.unlock+'</div>';
+        html+='<div class="pu-lv" data-edit-id="pu-lv-'+p.id+'">LV '+p.unlock+'</div>';
       }
       d.innerHTML=html;
       elPow.appendChild(d);

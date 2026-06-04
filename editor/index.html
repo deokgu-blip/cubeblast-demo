@@ -3,23 +3,30 @@
 <title>Cube Blast — 리소스 에디터</title>
 <style>
   html,body{margin:0;height:100%;font-family:'Apple SD Gothic Neo',-apple-system,sans-serif;background:#1d242e;overflow:hidden;}
-  #tabs{height:46px;display:flex;align-items:stretch;background:#11161d;border-bottom:1px solid #2a3340;}
-  #tabs button{flex:0 0 auto;padding:0 24px;background:none;border:none;color:#9fb0c2;font-size:15px;font-weight:700;cursor:pointer;border-bottom:3px solid transparent;}
-  #tabs button.on{color:#fff;border-bottom-color:#3a86ff;background:#171d26;}
-  #tabs .hint{margin-left:auto;align-self:center;padding-right:16px;color:#6b7c8f;font-size:12px;}
-  #frames{position:absolute;top:46px;left:0;right:0;bottom:0;}
+  /* 게임 iframe은 화면 전체를 차지 → 실제 게임과 동일한 해상도/비율로 렌더된다.
+     에디터 탭은 작은 플로팅 토글로 우하단에 띄워 게임/패널을 가리지 않는다. */
+  #frames{position:absolute;inset:0;}
   iframe{position:absolute;inset:0;width:100%;height:100%;border:none;display:none;background:#1d242e;}
   iframe.on{display:block;}
+  #tabs{position:fixed;bottom:14px;right:14px;z-index:2147483646;display:flex;flex-direction:column;gap:6px;
+    background:#11161df2;border:1px solid #2a3340;border-radius:12px;padding:8px;box-shadow:0 6px 20px #0009;}
+  #tabs .row{display:flex;gap:6px;}
+  #tabs button{flex:1;padding:7px 12px;background:#1b2330;border:1px solid #2a3340;color:#9fb0c2;font-size:13px;
+    font-weight:700;cursor:pointer;border-radius:8px;white-space:nowrap;}
+  #tabs button.on{color:#fff;background:#3a86ff;border-color:#5b9bff;}
+  #tabs .hint{color:#6b7c8f;font-size:10px;line-height:1.4;max-width:200px;text-align:center;}
 </style></head>
 <body>
-<div id="tabs">
-  <button data-f="ig" class="on">🎮 인게임 UI</button>
-  <button data-f="lo">🏠 로비 UI</button>
-  <span class="hint">편집 → 우상단 ⬇ Export → 디스코드로 전송하면 게임에 반영</span>
-</div>
 <div id="frames">
   <iframe id="ig" class="on" src="editor.html?stage=20"></iframe>
   <iframe id="lo" data-src="lobby_editor.html"></iframe>
+</div>
+<div id="tabs">
+  <div class="row">
+    <button data-f="ig" class="on">🎮 인게임</button>
+    <button data-f="lo">🏠 로비</button>
+  </div>
+  <div class="hint">편집 → 왼쪽 바 ⬇ Export → 디스코드로 전송하면 게임에 반영</div>
 </div>
 <script>
   // lazy-load the lobby editor on first switch (avoid two WebGL games at once)

@@ -110,22 +110,22 @@
   <div id="homeView" class="view active">
     <canvas id="homecv"></canvas>
     <div id="curInfo">
-      <div id="curBarWrap"><div id="curBar"></div></div>
+      <div id="curBarWrap" data-edit-id="lobby-progress"><div id="curBar"></div></div>
     </div>
   </div>
 
   <!-- 컬렉션 페이지 (캐러셀: 한 화면에 1개씩 크게) -->
   <div id="collView" class="view">
     <div id="collHdr">
-      <button id="collBack" aria-label="뒤로"><svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg></button>
-      <div id="collTitle">🖼️ 컬렉션</div>
+      <button id="collBack" data-edit-id="lobby-coll-back" aria-label="뒤로"><svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg></button>
+      <div id="collTitle" data-edit-id="lobby-coll-title">🖼️ 컬렉션</div>
     </div>
     <div id="collScroll">
       <canvas id="collcv"></canvas>
-      <button id="collPrev" class="collArrow" aria-label="이전"><svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg></button>
-      <button id="collNext" class="collArrow" aria-label="다음"><svg viewBox="0 0 24 24"><path d="M8.59 16.59 10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg></button>
-      <div id="collName"></div>
-      <div id="collCount"></div>
+      <button id="collPrev" class="collArrow" data-edit-id="lobby-coll-prev" aria-label="이전"><svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg></button>
+      <button id="collNext" class="collArrow" data-edit-id="lobby-coll-next" aria-label="다음"><svg viewBox="0 0 24 24"><path d="M8.59 16.59 10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg></button>
+      <div id="collName" data-edit-id="lobby-coll-name"></div>
+      <div id="collCount" data-edit-id="lobby-coll-count"></div>
       <div id="collEmpty"><div class="ic">📦</div><div class="t">아직 완성한 디오라마가 없어요</div><div class="s">디오라마를 완성하면 여기에 모여요</div></div>
     </div>
   </div>
