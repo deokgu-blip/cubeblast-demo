@@ -6850,7 +6850,7 @@
   // ===== 디오라마 제작 화면 (클리어 직후, 자체 Three.js 씬) =====
   const elMake=document.getElementById('make-overlay'), mkCanvas=document.getElementById('make-canvas');
   const mkBtn=document.getElementById('make-btn'), mkNext=document.getElementById('make-next'), mkHomeBtn=document.getElementById('make-home');
-  let mkRenderer,mkScene,mkCam,mkMesh,mkRAF, mkOrder=null, mkCur=-1, mkActive=false, mkBase=null, mkShadow=null;
+  let mkRenderer,mkScene,mkCam,mkMesh,mkGhost=null,mkRAF, mkOrder=null, mkCur=-1, mkActive=false, mkBase=null, mkShadow=null;
   let mkHold=false, mkCubesLeft=0, mkTimer=null, mkOnExit=null, mkFinished=false, mkMsEls=null;
   let mkCx=0,mkCy=0,mkCz=0, mkCurTotal=1, mkDropH=8, mkProj=[], _mkLast=0;
   let mkCelebrating=false, mkCelebT=0, mkPopT=0;       // 디오라마 완성 연출
@@ -6873,13 +6873,35 @@
     const rim=new THREE.DirectionalLight(0xcfe8ff,0.4); rim.position.set(-0.85,0.35,-0.95); mkScene.add(rim); // 뒤쪽 림라이트(실루엣 분리)
     (function loop(){ mkRAF=requestAnimationFrame(loop);
       const now=performance.now()*0.001; let dt=_mkLast?Math.min(0.05, now-_mkLast):0.016; _mkLast=now;
-      if(mkActive){ if(mkMesh) mkMesh.rotation.y-=0.012; mkStepDrops(dt); mkRenderer.render(mkScene,mkCam); }
+      if(mkActive){ if(mkMesh) mkMesh.rotation.y-=0.012; if(mkGhost) mkGhost.rotation.y=mkMesh?mkMesh.rotation.y:mkGhost.rotation.y; mkStepFX(dt); mkRenderer.render(mkScene,mkCam); }
     })();
   }
   function mkResize(){ if(!mkRenderer)return; const w=mkCanvas.clientWidth||DESIGN_W,h=mkCanvas.clientHeight||DESIGN_H; mkRenderer.setPixelRatio(Math.min(2,devicePixelRatio||1)); mkRenderer.setSize(w,h,false); mkCam.aspect=w/h; mkCam.updateProjectionMatrix(); }
   function mkClearProjectiles(){ for(const p of mkProj){ mkScene.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh.material.dispose(); } mkProj.length=0; }
+  function mkDisposeGhost(){ if(mkGhost){ mkScene.remove(mkGhost); mkGhost.geometry.dispose(); mkGhost.material.dispose(); mkGhost=null; } }
+  // 안 채운 복셀(중앙→바깥 순서의 filled 이후)만 투명 고스트로 재구성. 로비 makeGhost 와 동일 스펙.
+  function mkBuildGhost(){
+    mkDisposeGhost();
+    if(!mkOrder || !mkOrder.length) return;
+    const f=Math.max(0,Math.min(META.filled|0, mkOrder.length)), n=mkOrder.length-f;
+    const geo=new THREE.BoxGeometry(0.74,0.74,0.74);
+    const mat=new THREE.MeshStandardMaterial({roughness:1,metalness:0,transparent:true,opacity:0.12,color:0x9fd4ff,depthWrite:false});
+    mkGhost=new THREE.InstancedMesh(geo,mat,Math.max(1,n));
+    const dm=new THREE.Object3D();
+    for(let i=0;i<n;i++){ const v=mkOrder[f+i]; dm.position.set(v.x-mkCx,v.y-mkCy,v.z-mkCz); dm.updateMatrix(); mkGhost.setMatrixAt(i,dm.matrix); }
+    mkGhost.count=Math.max(0,n);
+    mkGhost.instanceMatrix.needsUpdate=true; mkGhost.renderOrder=2;
+    if(mkMesh) mkGhost.rotation.y=mkMesh.rotation.y;     // 솔리드와 회전 동기화
+    mkScene.add(mkGhost);
+  }
+  // filled 값 반영: 솔리드 count 갱신 + 고스트(미충전 복셀) 재구성. 로비와 동일하게 중앙→바깥 노출.
+  function mkApplyFill(){
+    if(mkMesh) mkMesh.count=Math.max(0,Math.min(META.filled|0, mkCurTotal));
+    mkBuildGhost();
+  }
   function mkBuild(di){
     if(mkMesh){ mkScene.remove(mkMesh); mkMesh.geometry.dispose(); mkMesh.material.dispose(); mkMesh=null; }
+    mkDisposeGhost();
     if(mkBase){ mkScene.remove(mkBase); mkBase.traverse(o=>{ if(o.geometry)o.geometry.dispose(); if(o.material)o.material.dispose(); }); mkBase=null; }
     if(mkShadow){ mkScene.remove(mkShadow); mkShadow.geometry.dispose(); mkShadow.material.dispose(); mkShadow=null; }
     mkClearProjectiles();
@@ -6888,15 +6910,18 @@
     let mnx=1e9,mny=1e9,mnz=1e9,mxx=-1e9,mxy=-1e9,mxz=-1e9;
     for(const v of cubes){ mnx=Math.min(mnx,v.x);mny=Math.min(mny,v.y);mnz=Math.min(mnz,v.z);mxx=Math.max(mxx,v.x);mxy=Math.max(mxy,v.y);mxz=Math.max(mxz,v.z); }
     mkCx=(mnx+mxx)/2; mkCy=(mny+mxy)/2; mkCz=(mnz+mxz)/2;
-    mkOrder=cubes.map(v=>({v, yy:v.y, rr:(v.x-mkCx)*(v.x-mkCx)+(v.z-mkCz)*(v.z-mkCz)})).sort((a,b)=> a.yy-b.yy || a.rr-b.rr).map(o=>o.v);  // 아래→위(같은 층은 중앙→바깥) → 떨어져 쌓임
+    // 가운데→바깥(3D 중심 거리순) — 로비 makeSolid/makeGhost 와 완전히 동일한 순서. 중앙부터 차오름.
+    mkOrder=cubes.map(v=>({v, dd:(v.x-mkCx)*(v.x-mkCx)+(v.y-mkCy)*(v.y-mkCy)+(v.z-mkCz)*(v.z-mkCz)})).sort((a,b)=> a.dd-b.dd).map(o=>o.v);
     mkCur=di; mkCurTotal=mkOrder.length; mkDropRamp=0;   // 새 디오라마는 가속 0에서 시작
-    const geo=new THREE.BoxGeometry(0.92,0.92,0.92), mat=new THREE.MeshStandardMaterial({roughness:0.95,metalness:0});
+    // 솔리드 메시: 인게임과 동일한 룩(1.12 박스로 살짝 겹쳐 틈/속비침 없음). 채운 복셀만 count.
+    const geo=new THREE.BoxGeometry(1.12,1.12,1.12), mat=new THREE.MeshStandardMaterial({roughness:0.62,metalness:0.04});
     mkMesh=new THREE.InstancedMesh(geo,mat,Math.max(1,mkOrder.length));
     const dm=new THREE.Object3D(), col=new THREE.Color();
     for(let i=0;i<mkOrder.length;i++){ const v=mkOrder[i]; dm.position.set(v.x-mkCx,v.y-mkCy,v.z-mkCz); dm.updateMatrix(); mkMesh.setMatrixAt(i,dm.matrix); col.setHex(hexToInt(v.c)); mkMesh.setColorAt(i,col); }
     mkMesh.count=Math.max(0,Math.min(META.filled, mkOrder.length));
     mkMesh.instanceMatrix.needsUpdate=true; if(mkMesh.instanceColor) mkMesh.instanceColor.needsUpdate=true;
     mkScene.add(mkMesh);
+    mkBuildGhost();   // 고스트(미충전 복셀): 전체 모델이 반투명으로 미리 보임
     // 글로시한 파란/흰 받침대(브롤톤) + 접지 그림자 — 전시 무대
     const horizR=Math.max(mxx-mnx, mxz-mnz)/2 + 1.0;
     const baseTopY=(mny-mkCy)-0.46;                                   // 모델 최하단 큐브의 바닥
@@ -6962,11 +6987,19 @@
     }
     return true;
   }
-  function mkReveal(){                           // 블록 착지 시 복셀 1개 노출
-    if(META.filled<mkCurTotal){
-      META.filled++; if(mkMesh) mkMesh.count=Math.min(META.filled, mkCurTotal); mkClaimMilestones(); mkUpdateBar();
+  function mkReveal(n){                          // 복셀 n개(기본 1)를 중앙→바깥 순서로 즉시 노출(고스트→솔리드)
+    n=Math.max(1,n|0);
+    if(META.filled>=mkCurTotal) return 0;
+    const before=META.filled;
+    META.filled=Math.min(mkCurTotal, META.filled+n);
+    const got=META.filled-before;
+    if(got>0){
+      mkApplyFill();                              // 솔리드 count↑ + 고스트(미충전) 재구성
+      mkPopT=0.18;                                // 새로 드러난 큐브에 살짝 팝(주스)
+      mkClaimMilestones(); mkUpdateBar();
       if(META.filled>=mkCurTotal) mkCelebrate(DIORAMA_SEQ[mkCur]?DIORAMA_SEQ[mkCur].label:'디오라마');   // 완성!
     }
+    return got;
   }
   function mkCelebrate(label){                    // 디오라마 완성 연출: 배너 + 모델 팝 + 햅틱
     mkCelebrating=true; mkCelebT=0; mkPopT=0.6;
@@ -6974,42 +7007,28 @@
     el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');   // 애니메이션 리셋·재생
     haptic('medium');
   }
-  function mkSpawnDrop(targetIdx){               // 타겟 복셀 위에서 "같은 색" 블록이 자석처럼 착 붙음
-    const v=mkOrder[targetIdx]; if(!v) return;
-    const tx=v.x-mkCx, ty=v.y-mkCy, tz=v.z-mkCz;
-    const geo=new THREE.BoxGeometry(0.92,0.92,0.92), mat=new THREE.MeshStandardMaterial({color:hexToInt(v.c), roughness:.5, metalness:.05});
-    // 시작 오프셋을 짧게(부유 낙하감 제거) → 가까운 거리에서 빠르게 스냅. 약간의 랜덤 방향감(좌/우/위)으로 기계적이지 않게.
-    const h=mkDropH*0.55;
-    const m=new THREE.Mesh(geo,mat); m.position.set(tx, ty+h, tz); m.scale.setScalar(0.82); mkScene.add(m);
-    mkProj.push({mesh:m, t:0, x:tx, z:tz, y0:ty+h, y1:ty});
-  }
-  // [DISABLED per user request] easeOutBack(오버슈트) — 블록이 목표를 살짝 지나쳤다 되돌아오는 탄성. 오버슈트가 "틀린 느낌"이라 비활성.
-  //   대신 mkStepDrops에서 easeOutCubic(오버슈트 없음)을 사용해 정확한 최종 좌표까지 직선 낙하 후 정지. 재활성화 시 아래 함수를 사용처에 다시 연결.
-  function _easeOutBack(k){ const s=1.7; const u=k-1; return 1 + (s+1)*u*u*u + s*u*u; }
-  function mkStepDrops(dt){
-    let landed=false;
-    for(let i=mkProj.length-1;i>=0;i--){ const p=mkProj[i]; p.t+=dt; const k=p.t/MK_DROP_DUR;
-      if(k>=1){ mkScene.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh.material.dispose(); mkProj.splice(i,1); mkReveal(); landed=true; haptic('selection'); continue; }
-      const e=1-Math.pow(1-k,3);                                        // easeOutCubic: 오버슈트 없이 정확한 최종 좌표까지 직선 낙하 후 정지(흔들림 X)
-      p.mesh.position.set(p.x, p.y0+(p.y1-p.y0)*e, p.z);
-      const s=0.82 + 0.18*Math.min(1,e);                                // 작게 시작→정사이즈로 팝(붙는 순간 또렷)
-      p.mesh.scale.setScalar(s);
-      const a=(1-k);                                                    // 회전은 빠르게 0으로 정렬(착 붙음)
-      p.mesh.rotation.x=a*a*0.22; p.mesh.rotation.y=a*a*0.22;
-    }
-    if(mkPopT>0 && mkMesh){ mkPopT=Math.max(0,mkPopT-dt); mkMesh.scale.setScalar(1+0.12*Math.sin((1-mkPopT/0.6)*Math.PI)); }   // 완성 팝
-    if(mkCelebrating){ mkCelebT+=dt; if(mkCelebT>1.3) mkCelebrating=false; }                                                  // 연출 후 진행 재개
-    if(landed && mkActive && !mkFinished && mkCubesLeft<=0 && mkProj.length===0){ mkStopHold(); mkFinish(); }  // 마지막 블록 착지 후 종료
+  // [낙하 블록 제거] 예전엔 타겟 위에서 큐브가 떨어져 착지(mkSpawnDrop/mkStepDrops)했지만,
+  //   로비와 통일하기 위해 "고스트→솔리드 즉시 노출" 방식으로 교체. 아래 두 함수는 더 이상 채움에 쓰이지 않음(불활성).
+  function mkSpawnDrop(){ /* no-op: 낙하 블록 폐기(로비와 통일) */ }
+  // FX 스테퍼: 낙하 블록 없이, 완성 팝(mkPopT) + 노출 팝 + 연출 타이머만 처리.
+  function mkStepFX(dt){
+    if(mkPopT>0 && mkMesh){
+      mkPopT=Math.max(0,mkPopT-dt);
+      const k=1-mkPopT/0.18;                                         // 0→1
+      const s=1+0.10*Math.sin(Math.min(1,k)*Math.PI);               // 살짝 부풀었다 원복(노출/완성 공통 팝)
+      mkMesh.scale.setScalar(s); if(mkGhost) mkGhost.scale.setScalar(s);
+    } else if(mkMesh && (mkMesh.scale.x!==1)){ mkMesh.scale.setScalar(1); if(mkGhost) mkGhost.scale.setScalar(1); }
+    if(mkCelebrating){ mkCelebT+=dt; if(mkCelebT>1.3) mkCelebrating=false; }                                  // 연출 후 진행 재개
   }
   function mkTick(){
     if(!mkActive){ mkStopHold(); return; }
     if(mkCelebrating) return;                            // 완성 연출 중에는 다음 디오라마 시작 대기
-    if(!mkAdvanceIfDone()) mkCubesLeft=0;                 // 모든 디오라마 완성 → 더 안 떨어뜨림
-    mkDropRamp++;                                          // 진행할수록 가속(점점 더 많이/빨리 떨어짐)
+    if(!mkAdvanceIfDone()) mkCubesLeft=0;                 // 모든 디오라마 완성 → 더 안 채움
+    mkDropRamp++;                                          // 진행할수록 가속(점점 더 많이/빨리 차오름)
     const perTick=Math.min(MK_DROP_MAX_PT, 1 + Math.floor(mkDropRamp*MK_DROP_ACCEL));
-    for(let k=0;k<perTick;k++){
-      if(mkCubesLeft>0 && mkProj.length<MK_DROP_CAP && (META.filled+mkProj.length)<mkCurTotal){ mkSpawnDrop(META.filled+mkProj.length); mkCubesLeft--; }
-    }
+    // 이번 틱에 노출할 수 = 남은 큐브·남은 복셀·perTick 중 최소
+    const want=Math.min(perTick, mkCubesLeft, mkCurTotal-META.filled);
+    if(want>0){ const got=mkReveal(want); mkCubesLeft-=got; haptic('selection'); }
     mkUpdateBar();
     if(mkCubesLeft<=0 && mkProj.length===0){ mkStopHold(); mkFinish(); }
   }
@@ -7017,6 +7036,7 @@
   function mkStopHold(){ mkHold=false; if(mkTimer){ clearInterval(mkTimer); mkTimer=null; } mkBtn.classList.remove('holding'); syncMeta(); }
   function mkFinish(){ if(mkFinished) return; mkFinished=true; mkBtn.style.display='none'; mkNext.style.display='block'; mkHomeBtn.style.display='block'; syncMeta(); }
   function mkExit(action){ mkActive=false; elMake.classList.remove('show'); mkStopHold(); mkClearProjectiles(); syncMeta(); const cb=mkOnExit; mkOnExit=null; if(cb) cb(action); }
+  // (고스트는 다음 mkBuild 진입 시 재구성/정리되므로 종료 시 별도 정리 불필요)
   function mkOpen(cubeReward, onExit){
     if(!DIORAMA_SEQ.length){ if(onExit) onExit('next'); return; }   // 디오라마 없으면 바로 진행
     if(mkActive) return;                                            // 중복 진입 가드(같은 클리어가 두 번 트리거돼도 1회만)
@@ -7035,11 +7055,25 @@
   window.addEventListener('resize', ()=>{ if(mkActive) mkResize(); });
   // 검증용(?mktest): 제작화면 강제 오픈 — 배포에선 URL 파라미터 없으면 비활성
   if(/[?&]mktest/.test(location.search)){ window.__mkTest=(n)=>{ phase='making'; mkOpen(n||40, (action)=>{ if(action==='home'){ goHome(); } else { phase='playing'; } }); return {di:META.di, filled:META.filled, total:(DIORAMA_SEQ[META.di]||{}).n, cubesPerClear:cubesPerClearFor(META.di), stages:stagesForDiorama(META.di), seqLen:DIORAMA_SEQ.length}; }; window.__mkState=()=>({di:META.di,filled:META.filled,coins:META.coins,curId:(DIORAMA_SEQ[META.di]||{}).id,ids:DIORAMA_SEQ.map(s=>s.id),seq:DIORAMA_SEQ.map(s=>s.id+':'+s.n)});
-    window.__mkFill=(frac)=>{ const f=Math.max(0,Math.min(1,frac==null?1:frac)); META.filled=Math.round(mkCurTotal*f); if(mkMesh){ mkMesh.count=Math.min(META.filled,mkCurTotal); } mkUpdateBar(); return {filled:META.filled,total:mkCurTotal}; }; window.__overTest=()=>showGameOver(); window.__overState=()=>({q:queueLength(), slots:slots.filter(Boolean).length, coin:coinBalance}); window.__deploy=(c,r)=>deployFromQueueColRow(c,r);
+    window.__mkFill=(frac)=>{ const f=Math.max(0,Math.min(1,frac==null?1:frac)); META.filled=Math.round(mkCurTotal*f); mkApplyFill(); mkUpdateBar(); return {filled:META.filled,total:mkCurTotal,solid:(mkMesh?mkMesh.count:0),ghost:(mkGhost?mkGhost.count:0)}; }; window.__overTest=()=>showGameOver(); window.__overState=()=>({q:queueLength(), slots:slots.filter(Boolean).length, coin:coinBalance}); window.__deploy=(c,r)=>deployFromQueueColRow(c,r);
     // 낙하 블록 상태(오버슈트 검증): 각 in-flight 블록의 현재 y, 목표 y1, 시작 y0, x/z(횡드리프트 확인), 진행 t.
     window.__mkProj=()=> (typeof mkProj!=='undefined'?mkProj:[]).map(p=>({ t:+p.t.toFixed(3), y:+p.mesh.position.y.toFixed(4), y0:+p.y0.toFixed(4), y1:+p.y1.toFixed(4),
       below: p.mesh.position.y < p.y1 - 1e-4,   // 목표보다 아래로 내려갔으면(오버슈트) true
-      x:+p.mesh.position.x.toFixed(4), tx:+p.x.toFixed(4), z:+p.mesh.position.z.toFixed(4), tz:+p.z.toFixed(4) })); }
+      x:+p.mesh.position.x.toFixed(4), tx:+p.x.toFixed(4), z:+p.mesh.position.z.toFixed(4), tz:+p.z.toFixed(4) }));
+    // 제작화면 검증용: 솔리드/고스트 설정 + 중앙→바깥 노출 검증(솔리드 최대거리 ≤ 고스트 최소거리면 통과). 낙하 블록 0 확인.
+    window.__mkDebug=()=>{ const f=Math.max(0,Math.min(META.filled|0,mkCurTotal));
+      const dist=v=>(v.x-mkCx)*(v.x-mkCx)+(v.y-mkCy)*(v.y-mkCy)+(v.z-mkCz)*(v.z-mkCz);
+      let solidMax=-1, ghostMin=1e9;
+      for(let i=0;i<f;i++) solidMax=Math.max(solidMax, dist(mkOrder[i]));
+      for(let i=f;i<mkOrder.length;i++) ghostMin=Math.min(ghostMin, dist(mkOrder[i]));
+      const g=mkMesh?mkMesh.geometry.parameters:{}, gg=mkGhost?mkGhost.geometry.parameters:{}, gm=mkGhost?mkGhost.material:{};
+      return { filled:f, total:mkCurTotal, solidCount:mkMesh?mkMesh.count:0, ghostCount:mkGhost?mkGhost.count:0,
+        centerOut: (f===0||f>=mkCurTotal)? true : (solidMax<=ghostMin+1e-6),
+        solidMaxDist:+solidMax.toFixed(3), ghostMinDist:+(ghostMin===1e9?-1:ghostMin).toFixed(3),
+        solidBox:g.width, ghostBox:gg.width, ghostOpacity:gm.opacity, ghostColor:gm.color?('0x'+gm.color.getHexString()):null,
+        ghostTransparent:!!gm.transparent, ghostDepthWrite:gm.depthWrite, ghostRenderOrder:mkGhost?mkGhost.renderOrder:null,
+        solidRough:mkMesh?mkMesh.material.roughness:null, solidMetal:mkMesh?mkMesh.material.metalness:null,
+        projectiles:(typeof mkProj!=='undefined'?mkProj.length:0) }; }; }
 
   function loadStage(idx){
     stageIndex=idx % STAGES.length;
@@ -7916,7 +7950,7 @@
         enterMakingPreview: ()=>{ try{
             if (phase==='making') return;
             phase='making'; mkOpen(40, ()=>{ phase='playing'; });
-            if (typeof mkCurTotal!=='undefined' && mkCurTotal>0){ META.filled=Math.round(mkCurTotal*0.55); if(mkMesh) mkMesh.count=Math.min(META.filled,mkCurTotal); }
+            if (typeof mkCurTotal!=='undefined' && mkCurTotal>0){ META.filled=Math.round(mkCurTotal*0.55); mkApplyFill(); }
             mkUpdateBar(); mkRenderMilestones();
             document.getElementById('make-next').style.display='block';   // 편집 대상 전부 표시
             document.getElementById('make-home').style.display='block';
