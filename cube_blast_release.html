@@ -5560,9 +5560,9 @@
   // ===== octopus blasters (3D, camera-attached) =====
   // scale: 큐보다 큼(슬롯 0.72 > 큐 0.58). yOff: 받침이 슬롯 정중앙에 앉도록 정렬.
   // faceY=Math.PI(180°): 슬롯 권총문어 = 정확한 뒷모습(머리 뒤가 플레이어 정면). 런타임 aimYaw 스윙은 이 기준 주위.
-  const OCTO = { dist:13.003885424585281, spread:0.68, xOff:0.10, yOff:-1.5410511543120065, scale:0.64, faceY:Math.PI, tiltX:0.18 };
+  const OCTO = { dist:13.003885424585281, spread:0.68, xOff:0.10, yOff:-1.5, scale:0.64, faceY:Math.PI, tiltX:0.18 };
   // 슬롯 줄(탭박스+문어) 전체 위치/간격 — 에디터 조절. x:+오른쪽, y:+위(px), gap:슬롯 간격(px).
-  const SLOT_ROW = { x:0, y:15, gap:10 };
+  const SLOT_ROW = { x:0, y:39, gap:10 };
   let _slotRowDY = 0;   // SLOT_ROW.y(px)를 투영보정한 3D y 델타(문어가 탭박스 따라 상하 이동)
   const _vp = new THREE.Vector3();
   let octoSource=null, octoReady=false, useOcto=false;
@@ -5919,10 +5919,10 @@
   // ===== queue blasters (3D octopus, default/no-anim, quarter-back view) =====
   // cols=3: 컬럼 수를 줄여 한 컬럼이 깊게 쌓이도록 함(레퍼런스 매칭). colGap은 5→3 변경에 맞춰 가로 spread 유지를 위해 확대.
   // faceY=-0.611(-35°): 블래스터 문어가 3/4 정면(레퍼런스 각도) — 얼굴·눈이 플레이어를 향하고 살짝 좌측향.
-  // rowsPer:3 = 3줄(레퍼런스). 전 줄 동일한 블래스터 모델. 윗줄(row0)=다음 차례=선명 숫자, 아래 2줄=흐린 숫자.
-  // rowGap 약간 축소(0.95→0.80)로 3줄이 화면에 들어오게. 뒷줄로 갈수록 살짝 작게(rowScaleFalloff)·뒤로(rowZ) 밀어 깊이감.
-  const QUEUE = { cols:3, rowsPer:3, colGap:0.86, rowGap:0.72, baseY:-2.3, dist:13, scale:0.38, faceY:-0.611, tiltX:0.18,
-                  rowScaleFalloff:0.12, rowZ:0.55 };
+  // rowsPer:3 = 3줄(레퍼런스). 전 줄 동일한 블래스터 모델. 윗줄(row0)=다음 차례=선명 숫자, 아래 2줄=흐린(비활성) 숫자.
+  // 사용자 요청: 큐 문어는 전부 같은 크기(깊이 스케일/Z 오프셋 0). 줄 구분은 숫자 흐림(qdim)만으로.
+  const QUEUE = { cols:3, rowsPer:3, colGap:0.86, rowGap:0.72, baseY:-1.9, dist:13, scale:0.38, faceY:-0.611, tiltX:0.18,
+                  rowScaleFalloff:0, rowZ:0 };
   const queueOctos=[];   // { octo, qi }
   function disposeQueueOcto(o){
     if (!o) return;
@@ -7855,6 +7855,6 @@
 })();
 </script>
 <!-- ODG_REGION_END: game-logic -->
-<script>(function(){var C={"preview-strip": {"dy": 43}, "coin-pill": {"dy": 8}};function ap(el){var id=el.getAttribute("data-edit-id"),o=C[id];if(!o)return;var p=[];if(o.dx||o.dy)p.push("translate("+(o.dx||0)+"px,"+(o.dy||0)+"px)");if(o.rot)p.push("rotate("+o.rot+"deg)");if(o.scale&&o.scale!=1)p.push("scale("+o.scale+")");if(p.length){el.style.transform=p.join(" ");el.style.transformOrigin="center center";}if(o.w)el.style.width=o.w+"px";if(o.h)el.style.height=o.h+"px";if(o.font)el.style.fontSize=o.font+"px";if(o.asset){if(el.tagName=="IMG")el.src=o.asset;else{el.style.backgroundImage='url("'+o.asset+'")';if(!el.style.backgroundSize)el.style.backgroundSize="contain";if(!el.style.backgroundRepeat)el.style.backgroundRepeat="no-repeat";if(!el.style.backgroundPosition)el.style.backgroundPosition="center";}}}function bg(){var b=C["@background"];if(b&&b.asset)document.documentElement.style.setProperty("--asset-background",'center/cover no-repeat url("'+b.asset+'")');}function all(){document.querySelectorAll("[data-edit-id]").forEach(ap);bg();}function boot(){all();new MutationObserver(function(ms){var t=0;ms.forEach(function(m){m.addedNodes.forEach(function(n){if(n.nodeType!=1)return;if(n.getAttribute&&n.getAttribute("data-edit-id")){ap(n);t=1;}if(n.querySelectorAll)n.querySelectorAll("[data-edit-id]").forEach(function(k){ap(k);t=1;});});});}).observe(document.body,{childList:true,subtree:true});}if(document.readyState!="loading")boot();else document.addEventListener("DOMContentLoaded",boot);})();</script>
+<script>(function(){var C={"preview-strip": {"dy": 43}, "coin-pill": {"dy": 8}, "coin-bg": {"scale": 1.13}, "powerups": {"dy": -26}};function ap(el){var id=el.getAttribute("data-edit-id"),o=C[id];if(!o)return;var p=[];if(o.dx||o.dy)p.push("translate("+(o.dx||0)+"px,"+(o.dy||0)+"px)");if(o.rot)p.push("rotate("+o.rot+"deg)");if(o.scale&&o.scale!=1)p.push("scale("+o.scale+")");if(p.length){el.style.transform=p.join(" ");el.style.transformOrigin="center center";}if(o.w)el.style.width=o.w+"px";if(o.h)el.style.height=o.h+"px";if(o.font)el.style.fontSize=o.font+"px";if(o.asset){if(el.tagName=="IMG")el.src=o.asset;else{el.style.backgroundImage='url("'+o.asset+'")';if(!el.style.backgroundSize)el.style.backgroundSize="contain";if(!el.style.backgroundRepeat)el.style.backgroundRepeat="no-repeat";if(!el.style.backgroundPosition)el.style.backgroundPosition="center";}}}function bg(){var b=C["@background"];if(b&&b.asset)document.documentElement.style.setProperty("--asset-background",'center/cover no-repeat url("'+b.asset+'")');}function all(){document.querySelectorAll("[data-edit-id]").forEach(ap);bg();}function boot(){all();new MutationObserver(function(ms){var t=0;ms.forEach(function(m){m.addedNodes.forEach(function(n){if(n.nodeType!=1)return;if(n.getAttribute&&n.getAttribute("data-edit-id")){ap(n);t=1;}if(n.querySelectorAll)n.querySelectorAll("[data-edit-id]").forEach(function(k){ap(k);t=1;});});});}).observe(document.body,{childList:true,subtree:true});}if(document.readyState!="loading")boot();else document.addEventListener("DOMContentLoaded",boot);})();</script>
 </body>
 </html>
