@@ -3770,9 +3770,9 @@
   .coin-bg { position:absolute; inset:0; z-index:0; border-radius:20px; background:rgba(8,20,42,0.42);
     background-size:100% 100%; background-repeat:no-repeat; transform-origin:center center; }
   /* coin-icon: 골드코인 아이콘(로드 시 --coin-icon, 폴백 라디얼 그라데이션) */
-  .coin-icon { position:relative; z-index:2; flex:0 0 auto; width:30px; height:30px; border-radius:50%;
-    background:var(--coin-icon, radial-gradient(circle at 35% 30%, #ffe08a, #f5b417 70%, #d68f00)) center/contain no-repeat;
-    filter:drop-shadow(0 2px 3px rgba(0,0,0,.35)); }
+  .coin-icon { position:relative; z-index:2; flex:0 0 auto; width:31px; height:31px; border-radius:0;
+    background:var(--coin-pixel, var(--coin-icon, radial-gradient(circle at 35% 30%, #ffe08a, #f5b417 70%, #d68f00))) center/contain no-repeat;
+    image-rendering:pixelated; filter:drop-shadow(0 2px 2px rgba(0,0,0,.3)); }
   .coin-icon::after { content:none; }
   #coin-amount { position:relative; z-index:3; }
   /* ── LEVEL 표시: 원본처럼 평범한 흰색 볼드 텍스트(칩/배너 제거) ── */
@@ -4186,7 +4186,7 @@
   .make-ms .card::before { content:none; }
   .make-ms .card::after { content:''; position:absolute; left:50%; top:100%; transform:translateX(-50%); width:0; height:0; border:8px solid transparent; border-top-color:#13315c; }
   .make-ms .ic { position:relative; z-index:1; width:34px; height:34px; background:var(--coin-pixel, var(--coin-icon)) center/contain no-repeat; image-rendering:pixelated; }
-  .make-ms .amt { position:relative; z-index:1; font-family:'BlackHanSans','Jua',sans-serif; font-weight:400; font-size:12px; color:#fff; background:#16294a; border:2px solid #13315c; border-radius:4px; padding:1px 8px; margin-top:3px; line-height:1.4; }
+  .make-ms .amt { position:relative; z-index:1; font-family:'BlackHanSans','Jua',sans-serif; font-weight:400; font-size:15px; color:#13315c; background:none; border:none; padding:0 2px; margin-top:2px; line-height:1.3; }
   .make-ms.hit .card { border-color:#ffd24a; box-shadow:0 0 12px rgba(255,200,70,.9), 0 4px 0 #b8870f, inset 0 2px 0 rgba(255,255,255,.95); }
   #make-stage { position:absolute; left:0; right:0; top:23%; bottom:24%; z-index:3; }   /* 모래사장 밴드 → 디오라마/무대 위치 */
   #make-canvas { width:100%; height:100%; display:block; }
@@ -4462,7 +4462,14 @@
     document.documentElement.style.setProperty('--game-scale', s.toFixed(4));
   }
   updateViewportScale();
-  window.addEventListener('resize', ()=>{ updateViewportScale(); if (typeof recomputeSlotXs==='function') recomputeSlotXs(); });
+  function _refit(){ updateViewportScale(); if (typeof recomputeSlotXs==='function') recomputeSlotXs(); }
+  window.addEventListener('resize', _refit);
+  // 모바일: 주소창 표시/숨김 등으로 뷰포트가 늦게·동적으로 변함 → visualViewport + 정착 타이머로
+  //   스케일·슬롯정렬을 재계산해 문어가 슬롯 정중앙에 정확히 따라오게 한다(해상도 의존 드리프트 방지).
+  if (window.visualViewport){ window.visualViewport.addEventListener('resize', _refit); window.visualViewport.addEventListener('scroll', _refit); }
+  window.addEventListener('orientationchange', ()=>setTimeout(_refit,80));
+  window.addEventListener('load', _refit);
+  [150,450,1000,1800].forEach(t=>setTimeout(_refit, t));
 
   // ===== reused temporaries (avoid `new` inside the game loop) =====
   const _v1 = new THREE.Vector3();
@@ -5599,17 +5606,8 @@
       const d=document.createElement('div');
       d.className='preview-cell'+(k===curCell?' cur':'');
       const _si=winStart+k;
-      // 실제 모델 썸네일을 셀 배경으로(투명 webp). 썸네일 없으면 이모지로 폴백.
-      const _thumb=(_si>=0&&_si<STAGES.length)?STAGE_THUMBS[STAGES[_si].modelId]:null;
-      if (_thumb){
-        d.style.backgroundImage='url('+_thumb+')';
-        d.style.backgroundSize='contain';
-        d.style.backgroundRepeat='no-repeat';
-        d.style.backgroundPosition='center';
-        d.textContent='';
-      } else {
-        d.textContent=(_si>=0&&_si<STAGES.length&&STAGES[_si].emoji)?STAGES[_si].emoji:'';
-      }
+      // 스테이지 표시 = 이모지(사용자 요청으로 썸네일 대신 이모지로 복귀).
+      d.textContent=(_si>=0&&_si<STAGES.length&&STAGES[_si].emoji)?STAGES[_si].emoji:'';
       elPrev.appendChild(d);
     }
   }
@@ -7765,6 +7763,7 @@
   function applyCoinUI(){
     if (loadedImages['coin_frame']) document.documentElement.style.setProperty('--coin-frame', 'url("'+loadedImages['coin_frame'].src+'")');
     if (loadedImages['coin_icon'])  document.documentElement.style.setProperty('--coin-icon', 'url("'+loadedImages['coin_icon'].src+'")');
+    if (loadedImages['coin_pixel']) document.documentElement.style.setProperty('--coin-pixel', 'url("'+loadedImages['coin_pixel'].src+'")');
   }
   function applyPopupUI(){
     // 파워업 모달 팝업 배경 + 닫기 버튼 이미지를 CSS 변수로 주입
