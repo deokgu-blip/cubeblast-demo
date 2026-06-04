@@ -553,7 +553,11 @@
   function buildTree(){
     if(!uiTreeWrap){ uiTreeWrap=el('div','ed-tree'); }
     uiTreeWrap.innerHTML='';
+    // 현재 화면의 요소만 표시: 제작 미리보기면 '디오라마 제작' 그룹만(+배경), 아니면 제작 그룹 제외(인게임 요소).
+    let inMaking=false; try{ inMaking=(API.phase==='making'); }catch(e){}
     UI_TREE.forEach(g=>{
+      const isMaking=/제작/.test(g.grp||''), isBg=/배경/.test(g.grp||'');
+      if(!isBg){ if(inMaking!==isMaking) return; }   // 제작모드↔제작그룹만, 그 외엔 비제작 그룹만
       uiTreeWrap.appendChild(el('div','ed-tree-grp', g.grp));
       g.items.forEach(it=>{
         const b=el('div','ed-tree-item', it.label); b.dataset.id=it.id;

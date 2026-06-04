@@ -180,7 +180,7 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
     // 가운데→바깥(3D 중심 거리순) — 제작화면도 동일하게 가운데부터 차오름(통일)
     const order=v.map(p=>({p,dd:(p[0]-cx)*(p[0]-cx)+(p[1]-cy)*(p[1]-cy)+(p[2]-cz)*(p[2]-cz)})).sort((a,b)=>a.dd-b.dd).map(o=>o.p);
     const hr=Math.max(mxx-mnx, mxz-mnz)/2 + 0.5;   // 받침대용 가로 반경
-    CACHE[d.id]={order, c:[cx,cy,cz], ext:Math.max(mxx-mnx,mxy-mny,mxz-mnz)+1, hy:(mxy-mny+1), hr:hr, botY:(mny-cy), total:v.length};
+    CACHE[d.id]={order, c:[cx,cy,cz], ext:Math.max(mxx-mnx,mxy-mny,mxz-mnz)+1, hy:(mxy-mny+1), hr:hr, hr2:Math.max(mxx-mnx,mxz-mnz)/2+1.0, botY:(mny-cy), total:v.length};
     return CACHE[d.id];
   }
   // 솔리드 InstancedMesh (불투명, 채운 복셀만 count). 카툰 매트.
@@ -210,9 +210,11 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
     return m;
   }
 
-  // ====== 홈: 현재 디오라마 3D ======
+  // ====== 홈: 현재 디오라마 3D (받침대·카메라 = 디오라마 제작화면과 100% 동일) ======
   const homecv=document.getElementById('homecv');
-  let hR,hS,hC,hRAF,hGroup=null,hGW=0,hGH=0;
+  let hR,hS,hC,hRAF,hGroup=null,hModel=null,hGW=0,hGH=0;
+  let _hShadowTex=null;
+  function hShadowTexture(){ if(_hShadowTex) return _hShadowTex; const c=document.createElement('canvas'); c.width=c.height=128; const g=c.getContext('2d'); const rad=g.createRadialGradient(64,64,3,64,64,62); rad.addColorStop(0,'rgba(16,26,48,.55)'); rad.addColorStop(.55,'rgba(16,26,48,.30)'); rad.addColorStop(1,'rgba(16,26,48,0)'); g.fillStyle=rad; g.fillRect(0,0,128,128); _hShadowTex=new THREE.CanvasTexture(c); return _hShadowTex; }
   function hEnsure(){
     if(hR) return;
     hR=new THREE.WebGLRenderer({canvas:homecv,antialias:true,alpha:true});
@@ -220,44 +222,45 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
     else if(THREE.sRGBEncoding!==undefined) hR.outputEncoding=THREE.sRGBEncoding;
     if(THREE.ACESFilmicToneMapping!==undefined){ hR.toneMapping=THREE.ACESFilmicToneMapping; hR.toneMappingExposure=1.05; }
     hS=new THREE.Scene();
-    hC=new THREE.OrthographicCamera(-1,1,1,-1,-3000,3000); hC.position.set(0,0,1000);
+    hC=new THREE.PerspectiveCamera(40,1,0.1,1000);   // 제작화면과 동일(원근 40°)
     hS.environment=null;     // 카툰 매트: 환경반사 제거
-    hS.add(new THREE.HemisphereLight(0xffffff,0x6c7d96,0.82));
-    hS.add(new THREE.AmbientLight(0xffffff,0.32));
-    const dl=new THREE.DirectionalLight(0xffffff,0.92); dl.position.set(0.5,1.1,1.2); hS.add(dl);
+    hS.add(new THREE.HemisphereLight(0xffffff,0x60728c,0.82));
+    hS.add(new THREE.AmbientLight(0xffffff,0.30));
+    const dl=new THREE.DirectionalLight(0xffffff,0.9); dl.position.set(0.7,1.25,0.85); hS.add(dl);
+    const rim=new THREE.DirectionalLight(0xcfe8ff,0.4); rim.position.set(-0.85,0.35,-0.95); hS.add(rim);
     (function loop(){ hRAF=requestAnimationFrame(loop);
       if(!views.home.classList.contains('active')) return;
-      if(hGroup) hGroup.rotation.y+=0.0055;
+      if(hModel) hModel.rotation.y-=0.012;   // 모델만 회전(받침대는 고정) — 제작화면과 동일
       hR.render(hS,hC); })();
   }
   function buildHome(){
     hEnsure();
     hGW=homeView.clientWidth; hGH=homeView.clientHeight;
     hR.setPixelRatio(Math.min(2,devicePixelRatio||1)); hR.setSize(hGW,hGH,false);
-    hC.left=-hGW/2;hC.right=hGW/2;hC.top=hGH/2;hC.bottom=-hGH/2;hC.updateProjectionMatrix();
-    if(hGroup){ hS.remove(hGroup); hGroup.traverse(o=>{ if(o.geometry)o.geometry.dispose(); if(o.material&&o.material.dispose)o.material.dispose(); }); hGroup=null; }
+    hC.aspect=hGW/hGH; hC.updateProjectionMatrix();
+    if(hGroup){ hS.remove(hGroup); hGroup.traverse(o=>{ if(o.geometry)o.geometry.dispose(); if(o.material&&o.material.dispose)o.material.dispose(); }); hGroup=null; hModel=null; }
     const d=DIORAMAS[META.di]; if(!d) return;
     const vd=voxOf(d), filled=clamp(META.filled|0,0,vd.total);
-    const g=new THREE.Group();
-    g.add(makeSolid(d,filled)); g.add(makeGhost(d,filled));
-    // 전시 받침대: 살짝 '내려다보는' 구도(받침 윗면이 보이고 바닥은 안 보임 — 깔끔한 전시대). 제작화면 받침 톤과 동일.
-    const hr=vd.hr, daisH=Math.max(0.7, hr*0.34), baseTop=vd.botY-0.30;
-    const dais=new THREE.Mesh(new THREE.CylinderGeometry(hr*1.16,hr*1.30,daisH,48),
-      new THREE.MeshStandardMaterial({color:0x8ec3f0,roughness:0.68,metalness:0}));
-    dais.position.y=baseTop-daisH/2; g.add(dais);
-    const rimd=new THREE.Mesh(new THREE.CylinderGeometry(hr*1.22,hr*1.22,Math.max(0.30,hr*0.14),48),
-      new THREE.MeshStandardMaterial({color:0xdcecff,roughness:0.6,metalness:0}));
-    rimd.position.y=baseTop-Math.max(0.30,hr*0.14)*0.25; g.add(rimd);
-    const topd=new THREE.Mesh(new THREE.CylinderGeometry(hr*1.16,hr*1.16,Math.max(0.22,hr*0.10),48),
-      new THREE.MeshStandardMaterial({color:0xf6faff,roughness:0.55,metalness:0}));
-    topd.position.y=baseTop+Math.max(0.22,hr*0.10)*0.3; g.add(topd);
-    // 모델+받침 함께 프레이밍(받침 가로폭 포함) + 살짝 내려다봐서 받침 바닥 안 보이게
-    const combH=vd.hy + daisH + 0.9;
-    const sc=Math.min((0.82*hGW)/Math.max(vd.ext, hr*2.7), (0.62*hGH)/combH);
-    g.scale.setScalar(sc);
-    g.position.set(0, hGH*0.05, 0);
-    g.rotation.x=0.06;      // +각도=살짝 내려다봄 → 받침 윗면 노출, 바닥 가려짐
-    hS.add(g); hGroup=g;
+    const cont=new THREE.Group();
+    // 모델(회전): solid+ghost
+    const model=new THREE.Group(); model.add(makeSolid(d,filled)); model.add(makeGhost(d,filled)); cont.add(model);
+    // ── 받침대: 디오라마 제작화면과 '완전히 동일한' 파라미터/지오메트리/그림자 ──
+    const horizR=vd.hr2, baseTopY=vd.botY-0.46, tierH=Math.max(0.42,horizR*0.17);
+    const daisH=tierH*2.4, rtop=horizR*1.10, rbot=horizR*1.42;
+    const dais=new THREE.Mesh(new THREE.CylinderGeometry(rtop,rbot,daisH,48), new THREE.MeshStandardMaterial({color:0x8ec3f0,roughness:.7,metalness:0}));
+    dais.position.y=baseTopY-daisH/2; cont.add(dais);
+    const rim=new THREE.Mesh(new THREE.CylinderGeometry(rtop*1.04,rtop*1.04,tierH*0.5,48), new THREE.MeshStandardMaterial({color:0xdcecff,roughness:.65,metalness:0}));
+    rim.position.y=baseTopY-tierH*0.2; cont.add(rim);
+    const topm=new THREE.Mesh(new THREE.CylinderGeometry(rtop,rtop,tierH*0.22,48), new THREE.MeshStandardMaterial({color:0xf6faff,roughness:.6,metalness:0}));
+    topm.position.y=baseTopY+tierH*0.06; cont.add(topm);
+    const shadow=new THREE.Mesh(new THREE.CircleGeometry(horizR*0.9,40), new THREE.MeshBasicMaterial({map:hShadowTexture(),transparent:true,depthWrite:false}));
+    shadow.rotation.x=-Math.PI/2; shadow.position.set(0,baseTopY+0.05,0); cont.add(shadow);
+    hS.add(cont); hGroup=cont; hModel=model;
+    // ── 카메라 프레이밍: 제작화면과 동일(원근 40°, 받침 바닥 안 보이는 구도) ──
+    const modelTopY=vd.botY+(vd.hy-1), daisBotY=baseTopY-daisH, cY=(modelTopY+daisBotY)/2, spanY=modelTopY-daisBotY;
+    const R=Math.max(horizR*1.12, spanY*0.42)*0.80, vf=hC.fov*Math.PI/180;
+    const dV=R/Math.tan(vf/2), hf=2*Math.atan(Math.tan(vf/2)*hC.aspect), dH=R/Math.tan(hf/2);
+    hC.position.set(0, cY+spanY*0.06, Math.max(dV,dH)); hC.lookAt(0, cY, 0);
     // 진행바만 (디오라마 이름/설명 텍스트는 제거)
     const pct=vd.total? Math.round(filled/vd.total*100):0;
     document.getElementById('curBar').style.width=pct+'%';
@@ -355,7 +358,7 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
   const elCoin=document.getElementById('coinval');
   function fmtCoins(v){ return v>=1000?(v/1000).toFixed(2)+'K':String(v|0); }
   const wrap=document.getElementById('gamewrap'), frame=document.getElementById('gameframe');
-  function startGame(){ frame.src='cube_blast_release.html?v=1780560286&meta='+encodeURIComponent(JSON.stringify(META)); wrap.classList.add('show'); }
+  function startGame(){ frame.src='cube_blast_release.html?v=1780561933&meta='+encodeURIComponent(JSON.stringify(META)); wrap.classList.add('show'); }
   play.onclick=startGame;
   function closeGame(){ wrap.classList.remove('show'); frame.src='about:blank'; render(); }
   window.addEventListener('message', e=>{ const d=e.data; if(!d||typeof d!=='object') return;
