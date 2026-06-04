@@ -106,7 +106,7 @@
   #gameframe{width:100%;height:100%;border:none;display:block;}
   #toast{position:fixed;left:50%;bottom:160px;transform:translateX(-50%) translateY(20px);background:#13315cee;color:#fff;font-weight:800;padding:9px 16px;border-radius:10px;opacity:0;transition:.2s;z-index:80;pointer-events:none;}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-</style><link rel="stylesheet" href="editor.css?v=1780562593">
+</style><link rel="stylesheet" href="editor.css?v=1780562921">
 <script>window.__EDITOR=true;window.__EDITOR_CONFIG={
  "config": {},
  "octo": {
@@ -297,23 +297,13 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
     const cont=new THREE.Group();
     // 모델(회전): solid+ghost
     const model=new THREE.Group(); model.add(makeSolid(d,filled)); model.add(makeGhost(d,filled)); cont.add(model);
-    // ── 받침대: 디오라마 제작화면과 '완전히 동일한' 파라미터/지오메트리/그림자 ──
-    const horizR=vd.hr2, baseTopY=vd.botY-0.46, tierH=Math.max(0.42,horizR*0.17);
-    const daisH=tierH*2.4, rtop=horizR*1.10, rbot=horizR*1.42;
-    const dais=new THREE.Mesh(new THREE.CylinderGeometry(rtop,rbot,daisH,48), new THREE.MeshStandardMaterial({color:0x8ec3f0,roughness:.7,metalness:0}));
-    dais.position.y=baseTopY-daisH/2; cont.add(dais);
-    const rim=new THREE.Mesh(new THREE.CylinderGeometry(rtop*1.04,rtop*1.04,tierH*0.5,48), new THREE.MeshStandardMaterial({color:0xdcecff,roughness:.65,metalness:0}));
-    rim.position.y=baseTopY-tierH*0.2; cont.add(rim);
-    const topm=new THREE.Mesh(new THREE.CylinderGeometry(rtop,rtop,tierH*0.22,48), new THREE.MeshStandardMaterial({color:0xf6faff,roughness:.6,metalness:0}));
-    topm.position.y=baseTopY+tierH*0.06; cont.add(topm);
-    const shadow=new THREE.Mesh(new THREE.CircleGeometry(horizR*0.9,40), new THREE.MeshBasicMaterial({map:hShadowTexture(),transparent:true,depthWrite:false}));
-    shadow.rotation.x=-Math.PI/2; shadow.position.set(0,baseTopY+0.05,0); cont.add(shadow);
+    // ── 받침대 없음(사용자 요청): 디오라마가 바다 픽셀아트 배경 위에 떠 있는 구도. 모델만 회전. ──
     hS.add(cont); hGroup=cont; hModel=model;
-    // ── 카메라 프레이밍: 제작화면과 동일(원근 40°, 받침 바닥 안 보이는 구도) ──
-    const modelTopY=vd.botY+(vd.hy-1), daisBotY=baseTopY-daisH, cY=(modelTopY+daisBotY)/2, spanY=modelTopY-daisBotY;
-    const R=Math.max(horizR*1.12, spanY*0.42)*0.80, vf=hC.fov*Math.PI/180;
+    // 카메라 프레이밍 = 제작화면과 동일(모델만 정면). 모델 중심(0,0,0) 기준.
+    const horizR=(vd.hr2-1.0)+0.8, spanY=vd.hy;
+    const R=Math.max(horizR*1.1, spanY*0.55)*0.96, vf=hC.fov*Math.PI/180;
     const dV=R/Math.tan(vf/2), hf=2*Math.atan(Math.tan(vf/2)*hC.aspect), dH=R/Math.tan(hf/2);
-    hC.position.set(0, cY+spanY*0.06, Math.max(dV,dH)); hC.lookAt(0, cY, 0);
+    hC.position.set(0, 0, Math.max(dV,dH)); hC.lookAt(0, 0, 0);
     // 진행바만 (디오라마 이름/설명 텍스트는 제거)
     const pct=vd.total? Math.round(filled/vd.total*100):0;
     document.getElementById('curBar').style.width=pct+'%';
@@ -439,5 +429,5 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
 
   render();
 })();
-</script><script src="lobby_editor_addon.js?v=1780562593"></script>
+</script><script src="lobby_editor_addon.js?v=1780562921"></script>
 </body></html>
