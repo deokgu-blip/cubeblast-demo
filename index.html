@@ -228,8 +228,8 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
     const vd=voxOf(d), filled=clamp(META.filled|0,0,vd.total);
     const g=new THREE.Group();
     g.add(makeSolid(d,filled)); g.add(makeGhost(d,filled));
-    // 화면에 적당히 크게: 가로 0.62, 세로 0.52 안에 들어오도록.
-    const sc=Math.min((0.62*hGW)/vd.ext,(0.52*hGH)/vd.ext);
+    // 화면에 크게(쌓이는 게 잘 보이게): 가로 0.82, 세로 0.66 안에 들어오도록.
+    const sc=Math.min((0.82*hGW)/vd.ext,(0.66*hGH)/vd.ext);
     g.scale.setScalar(sc);
     g.position.set(0, hGH*0.03, 0);    // 살짝 위로(이름/PLAY 공간)
     g.rotation.x=-0.12;

@@ -309,6 +309,12 @@
     }
     if (!data || typeof data!=='object') data = (window.__EDITOR_CONFIG||{});
     applyLoadedConfig(data);
+    // '제작' 탭(editor.html?making=1): 로드 후 자동으로 2D 편집 ON + 디오라마 제작 화면 진입(첫 제작요소 선택).
+    if (/[?&]making=1/.test(location.search)){
+      setTimeout(()=>{ try{ if(!uiMode) toggleUIMode();
+        const g=UI_TREE.find(x=>/제작/.test(x.grp||'')); if(g&&g.items[0]) selectUI(g.items[0]);
+      }catch(e){} }, 500);
+    }
   }
   // 구버전 CSS-셀렉터 키({"#preview-strip":...,".coin-pill":...}) → data-edit-id 키로 마이그레이션
   function migrateUI(ui){
