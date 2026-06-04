@@ -393,6 +393,16 @@
       {id:'clear-coin-val',  label:'· 코인 숫자', font:true},
       {id:'clear-tap',       label:'다음 안내', font:true},
     ]},
+    {grp:'디오라마 제작 화면', items:[
+      {id:'make-label',  label:'제작 안내문구', font:true},
+      {id:'make-top',    label:'상단 진행영역 전체'},
+      {id:'make-hammer', label:'· 망치 진행원', img:true},
+      {id:'make-bar',    label:'· 진행 바'},
+      {id:'make-btn',    label:'큐브 버튼', img:true},
+      {id:'make-next',   label:'계속 버튼', img:true, font:true},
+      {id:'make-home',   label:'홈 버튼', img:true},
+      {id:'make-pct',    label:'퍼센트 숫자', font:true},
+    ]},
     {grp:'배경', items:[
       {id:'@background', label:'게임 배경 이미지', img:true, bgvar:'--asset-background', bgmode:'cover'},
     ]},
@@ -522,7 +532,13 @@
     hRot.addEventListener('pointerup', ()=>{ rt=null; });
     document.body.appendChild(uiOutline);
   }
-  function selectUI(item){ uiSel=item; ensureUIOutline(); uiOutlineUpdate(); buildUIBar(); refreshTreeSel(); }
+  function selectUI(item){
+    uiSel=item;
+    // 디오라마 제작 화면 요소를 고르면 제작화면을 띄워야 보이고 조절 가능 → 진입/이탈 자동 전환.
+    try{ if (item && /^make-/.test(item.id)){ if(API.enterMakingPreview) API.enterMakingPreview(); }
+         else { if(API.exitMakingPreview) API.exitMakingPreview(); } }catch(e){}
+    ensureUIOutline(); uiOutlineUpdate(); buildUIBar(); refreshTreeSel();
+  }
   function refreshTreeSel(){ if(!uiTreeWrap)return; uiTreeWrap.querySelectorAll('.ed-tree-item').forEach(b=>b.classList.toggle('on', uiSel&&b.dataset.id===uiSel.id)); }
   function syncUIBar(){ if(!uiBar||!uiSel)return; const o=uiObj(uiSel.id);
     uiBar.querySelectorAll('input.ed-range,input.ed-num2').forEach(s=>{ const k=s.dataset.k; if(!k)return; const v=(o[k]!=null?o[k]:(k==='scale'?1:0)); s.value=v; }); }
@@ -599,7 +615,7 @@
   function toggleUIMode(){
     uiMode=!uiMode; document.body.classList.toggle('ed-uimode',uiMode);
     if(uiMode){ if(tc)tc.detach(); sel=null; if(!uiSel)uiSel=UI_TREE[0].items[0]; ensureUIObserver(); ensureUIOutline(); buildUIBar(); uiOutlineUpdate(); flash('2D 리소스 편집 ON — 목록/캔버스에서 편집'); }
-    else { if(uiOutline)uiOutline.style.display='none'; if(uiBar)uiBar.style.display='none'; flash('2D 리소스 편집 OFF'); }
+    else { if(uiOutline)uiOutline.style.display='none'; if(uiBar)uiBar.style.display='none'; try{ if(API.exitMakingPreview) API.exitMakingPreview(); }catch(e){} flash('2D 리소스 편집 OFF'); }
     const b=[...document.querySelectorAll('.ed-btn')].find(x=>/2D/.test(x.textContent)); if(b)b.classList.toggle('on',uiMode);
   }
   // UI 모드에서 화면 요소 직접 클릭 → 선택(게임 동작 차단)

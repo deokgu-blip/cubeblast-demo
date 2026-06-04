@@ -4334,9 +4334,9 @@
       <div id="make-stage"><canvas id="make-canvas"></canvas></div>
       <div id="make-vignette"></div>
       <div id="make-spot"></div>
-      <div id="make-top">
-        <div id="make-hammer"><div class="circ"><div class="hicon"></div></div><div id="make-hammer-pct">0%</div></div>
-        <div id="make-barwrap">
+      <div id="make-top" data-edit-id="make-top">
+        <div id="make-hammer" data-edit-id="make-hammer"><div class="circ"><div class="hicon"></div></div><div id="make-hammer-pct">0%</div></div>
+        <div id="make-barwrap" data-edit-id="make-bar">
           <div id="make-fillclip"><div id="make-bar"></div></div>
           <div id="make-grid"></div>
           <div id="make-ms-layer"></div>
@@ -4344,11 +4344,11 @@
       </div>
       <div id="make-coinpop"></div>
       <div id="make-complete"></div>
-      <div id="make-label">디오라마 제작!</div>
-      <div id="make-pct">0%</div>
-      <button id="make-btn"><span class="cubeicon"></span><span id="make-cubes">0</span></button>
-      <button id="make-next">계속 ▶</button>
-      <button id="make-home">🏠</button>
+      <div id="make-label" data-edit-id="make-label">디오라마 제작!</div>
+      <div id="make-pct" data-edit-id="make-pct">0%</div>
+      <button id="make-btn" data-edit-id="make-btn"><span class="cubeicon"></span><span id="make-cubes">0</span></button>
+      <button id="make-next" data-edit-id="make-next">계속 ▶</button>
+      <button id="make-home" data-edit-id="make-home">🏠</button>
     </div>
   </div>
 </div>
@@ -7882,6 +7882,17 @@
         pulseHeads: ()=>{ for (let i=0;i<SLOTS;i++){ if(slots[i]&&slots[i].octo) slots[i].octo.userData.pumpT=0; } if(extraCannon&&extraCannon.octo) extraCannon.octo.userData.pumpT=0; },
         refreshSlotOctos: ()=>{ recomputeSlotXs(); for (let i=0;i<SLOTS;i++){ const s=slots[i]; if(s&&s.octo){ s.octo.position.set(octoLocalX(i), slotOctoY(), -OCTO.dist); s.octo.scale.setScalar(OCTO.scale); s.octo.rotation.set(OCTO.tiltX, OCTO.faceY+(s.octo.userData.aimYaw||0), 0); } } if(extraCannon&&extraCannon.octo) extraCannon.octo.scale.setScalar(OCTO.scale); },
         slotRow: SLOT_ROW, applySlotRow,
+        // 디오라마 제작 화면을 에디터에서 띄워 편집(요소가 보여야 선택/조절 가능). 부분 채움 + 완료버튼까지 모두 표시.
+        enterMakingPreview: ()=>{ try{
+            if (phase==='making') return;
+            phase='making'; mkOpen(40, ()=>{ phase='playing'; });
+            if (typeof mkCurTotal!=='undefined' && mkCurTotal>0){ META.filled=Math.round(mkCurTotal*0.55); if(mkMesh) mkMesh.count=Math.min(META.filled,mkCurTotal); }
+            mkUpdateBar(); mkRenderMilestones();
+            document.getElementById('make-next').style.display='block';   // 편집 대상 전부 표시
+            document.getElementById('make-home').style.display='block';
+          }catch(e){} },
+        exitMakingPreview: ()=>{ try{ if (phase==='making') mkExit('next'); }catch(e){} },
+        get phase(){ return phase; },
       };
       window.dispatchEvent(new CustomEvent('editor-api-ready'));
     }
