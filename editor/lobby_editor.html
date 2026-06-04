@@ -60,6 +60,12 @@
         cursor:pointer;filter:drop-shadow(0 6px 7px rgba(8,40,80,.45));color:transparent;font-size:0;}
   #play:active{transform:translateX(-50%) scale(.95);}
   #play.hide{display:none;}
+  /* 플레이 버튼 위 'LEVEL N' 배지(버튼 이미지의 PLAY 텍스트와 겹치지 않게 위쪽에) */
+  #play .plv{position:absolute;left:50%;top:-16px;transform:translateX(-50%);white-space:nowrap;z-index:1;
+        background:linear-gradient(180deg,#1b3357,#0c1d3b);color:#fff;border:2px solid #13315c;
+        font-family:'BlackHanSans','Jua',sans-serif;font-size:14px;letter-spacing:.5px;
+        padding:2px 15px;border-radius:13px;box-shadow:0 2px 4px rgba(0,0,0,.35);}
+  #play .ptxt{display:none;}
 
   /* ===== 컬렉션 페이지 ===== */
   #collView{background:rgba(8,18,38,0.55);backdrop-filter:blur(2px);z-index:20;}
@@ -100,7 +106,7 @@
   #gameframe{width:100%;height:100%;border:none;display:block;}
   #toast{position:fixed;left:50%;bottom:160px;transform:translateX(-50%) translateY(20px);background:#13315cee;color:#fff;font-weight:800;padding:9px 16px;border-radius:10px;opacity:0;transition:.2s;z-index:80;pointer-events:none;}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-</style><link rel="stylesheet" href="editor.css?v=1780558690">
+</style><link rel="stylesheet" href="editor.css?v=1780560286">
 <script>window.__EDITOR=true;window.__EDITOR_CONFIG={
  "config": {},
  "octo": {
@@ -209,7 +215,7 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
   "use strict";
   const LS='cb_meta';
   function loadMeta(){ try{ const m=JSON.parse(localStorage.getItem(LS)); if(m) return m; }catch(e){}
-    return {di:0, filled:0, coins:1270, ms:{}}; }
+    return {di:0, filled:0, coins:1270, ms:{}, level:1}; }
   function saveMeta(){ try{ localStorage.setItem(LS, JSON.stringify(META)); }catch(e){} }
   let META = loadMeta();
   if(META.di>=DIORAMAS.length) META.di=DIORAMAS.length-1;
@@ -233,8 +239,8 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
   // 솔리드 InstancedMesh (불투명, 채운 복셀만 count). 카툰 매트.
   function makeSolid(d, filled){
     const vd=voxOf(d), ord=vd.order, c0=vd.c;
-    // 인게임과 동일한 룩: 큐브가 꽉 붙는 솔리드(살짝 겹침, 틈/속 비침 없음).
-    const geo=new THREE.BoxGeometry(1.12,1.12,1.12), mat=new THREE.MeshStandardMaterial({roughness:0.62,metalness:0.04});
+    // 큐브를 딱 맞닿게(1.0) — 겹침 제거로 회전 시 모서리 z-파이팅(자글자글) 없음, 틈도 없음.
+    const geo=new THREE.BoxGeometry(1.0,1.0,1.0), mat=new THREE.MeshStandardMaterial({roughness:0.62,metalness:0.04});
     const m=new THREE.InstancedMesh(geo,mat,Math.max(1,ord.length));
     const dm=new THREE.Object3D(), col=new THREE.Color();
     for(let i=0;i<ord.length;i++){ const p=ord[i]; dm.position.set(p[0]-c0[0],p[1]-c0[1],p[2]-c0[2]); dm.updateMatrix(); m.setMatrixAt(i,dm.matrix); col.set(GROUP_DISPLAY[p[3]]||'#fff'); m.setColorAt(i,col); }
@@ -287,23 +293,23 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
     const vd=voxOf(d), filled=clamp(META.filled|0,0,vd.total);
     const g=new THREE.Group();
     g.add(makeSolid(d,filled)); g.add(makeGhost(d,filled));
-    // 전시 받침대(인게임 제작화면과 동일 톤의 글로시 받침 + 흰 윗판) — 휑한 로비를 '전시장'처럼 채우고 디오라마를 anchor.
-    const hr=vd.hr, daisH=Math.max(1.0,hr*0.42), baseTop=vd.botY-0.45;
-    const dais=new THREE.Mesh(new THREE.CylinderGeometry(hr*1.02,hr*1.30,daisH,48),
+    // 전시 받침대: 살짝 '내려다보는' 구도(받침 윗면이 보이고 바닥은 안 보임 — 깔끔한 전시대). 제작화면 받침 톤과 동일.
+    const hr=vd.hr, daisH=Math.max(0.7, hr*0.34), baseTop=vd.botY-0.30;
+    const dais=new THREE.Mesh(new THREE.CylinderGeometry(hr*1.16,hr*1.30,daisH,48),
       new THREE.MeshStandardMaterial({color:0x8ec3f0,roughness:0.68,metalness:0}));
     dais.position.y=baseTop-daisH/2; g.add(dais);
-    const rimd=new THREE.Mesh(new THREE.CylinderGeometry(hr*1.06,hr*1.06,Math.max(0.3,hr*0.14),48),
+    const rimd=new THREE.Mesh(new THREE.CylinderGeometry(hr*1.22,hr*1.22,Math.max(0.30,hr*0.14),48),
       new THREE.MeshStandardMaterial({color:0xdcecff,roughness:0.6,metalness:0}));
-    rimd.position.y=baseTop-Math.max(0.3,hr*0.14)*0.3; g.add(rimd);
-    const topd=new THREE.Mesh(new THREE.CylinderGeometry(hr*1.0,hr*1.0,Math.max(0.22,hr*0.1),48),
+    rimd.position.y=baseTop-Math.max(0.30,hr*0.14)*0.25; g.add(rimd);
+    const topd=new THREE.Mesh(new THREE.CylinderGeometry(hr*1.16,hr*1.16,Math.max(0.22,hr*0.10),48),
       new THREE.MeshStandardMaterial({color:0xf6faff,roughness:0.55,metalness:0}));
-    topd.position.y=baseTop+Math.max(0.22,hr*0.1)*0.2; g.add(topd);
-    // 모델+받침을 함께 프레이밍(세로 합산 높이로 fit) + 위로 살짝(이름/PLAY 공간)
+    topd.position.y=baseTop+Math.max(0.22,hr*0.10)*0.3; g.add(topd);
+    // 모델+받침 함께 프레이밍(받침 가로폭 포함) + 살짝 내려다봐서 받침 바닥 안 보이게
     const combH=vd.hy + daisH + 0.9;
-    const sc=Math.min((0.86*hGW)/vd.ext, (0.66*hGH)/combH);
+    const sc=Math.min((0.82*hGW)/Math.max(vd.ext, hr*2.7), (0.62*hGH)/combH);
     g.scale.setScalar(sc);
-    g.position.set(0, hGH*0.10, 0);
-    g.rotation.x=-0.12;
+    g.position.set(0, hGH*0.05, 0);
+    g.rotation.x=0.06;      // +각도=살짝 내려다봄 → 받침 윗면 노출, 바닥 가려짐
     hS.add(g); hGroup=g;
     // 진행바만 (디오라마 이름/설명 텍스트는 제거)
     const pct=vd.total? Math.round(filled/vd.total*100):0;
@@ -406,7 +412,7 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
   play.onclick=startGame;
   function closeGame(){ wrap.classList.remove('show'); frame.src='about:blank'; render(); }
   window.addEventListener('message', e=>{ const d=e.data; if(!d||typeof d!=='object') return;
-    if(d.type==='cubeblast:meta'){ META.di=d.di|0; META.filled=d.filled|0; if(d.coins!=null)META.coins=+d.coins; META.ms=d.ms||{};
+    if(d.type==='cubeblast:meta'){ META.di=d.di|0; META.filled=d.filled|0; if(d.coins!=null)META.coins=+d.coins; META.ms=d.ms||{}; if(d.level)META.level=d.level|0;
       if(META.di>=DIORAMAS.length)META.di=DIORAMAS.length-1; if(META.di<0)META.di=0; saveMeta(); render(); }
     else if(d.type==='cubeblast:home'){ closeGame(); }
   });
@@ -415,6 +421,7 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
 
   function render(){
     elCoin.textContent=fmtCoins(META.coins||0);
+    play.innerHTML='<span class="plv">LEVEL '+(META.level||1)+'</span><span class="ptxt">PLAY</span>';   // 플레이 버튼에 현재 레벨 표기
     if(curView==='home') buildHome();
     else buildColl();
   }
@@ -429,5 +436,5 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
 
   render();
 })();
-</script><script src="lobby_editor_addon.js?v=1780558690"></script>
+</script><script src="lobby_editor_addon.js?v=1780560286"></script>
 </body></html>

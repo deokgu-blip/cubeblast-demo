@@ -5371,10 +5371,10 @@
   const MILESTONES = [{p:0.30,c:50},{p:0.70,c:150},{p:1.00,c:400}];                          // 30/70/100% → 코인
   // 진행상태(로비가 ?meta=로 주입). {di:디오라마인덱스, filled:현재모델채운복셀, coins, ms:{di:[claimed%...]}}
   let META = (function(){ try{ const m=new URLSearchParams(location.search).get('meta');
-      if(m){ const o=JSON.parse(m); return {di:o.di|0, filled:o.filled|0, coins:(o.coins==null?null:+o.coins), ms:o.ms||{}}; } }catch(e){}
-    return {di:0, filled:0, coins:null, ms:{}}; })();
+      if(m){ const o=JSON.parse(m); return {di:o.di|0, filled:o.filled|0, coins:(o.coins==null?null:+o.coins), ms:o.ms||{}, level:(o.level|0)||1}; } }catch(e){}
+    return {di:0, filled:0, coins:null, ms:{}, level:1}; })();
   function syncMeta(){
-    const payload={ type:'cubeblast:meta', di:META.di, filled:META.filled, coins:META.coins, ms:META.ms };
+    const payload={ type:'cubeblast:meta', di:META.di, filled:META.filled, coins:META.coins, ms:META.ms, level:META.level||1 };
     try{ if(window.parent && window.parent!==window) window.parent.postMessage(payload,'*'); }catch(e){}
     try{ if(window.AndroidApp && window.AndroidApp.saveMeta) window.AndroidApp.saveMeta(JSON.stringify(payload)); }catch(e){}
   }
@@ -6913,8 +6913,8 @@
     // 가운데→바깥(3D 중심 거리순) — 로비 makeSolid/makeGhost 와 완전히 동일한 순서. 중앙부터 차오름.
     mkOrder=cubes.map(v=>({v, dd:(v.x-mkCx)*(v.x-mkCx)+(v.y-mkCy)*(v.y-mkCy)+(v.z-mkCz)*(v.z-mkCz)})).sort((a,b)=> a.dd-b.dd).map(o=>o.v);
     mkCur=di; mkCurTotal=mkOrder.length; mkDropRamp=0;   // 새 디오라마는 가속 0에서 시작
-    // 솔리드 메시: 인게임과 동일한 룩(1.12 박스로 살짝 겹쳐 틈/속비침 없음). 채운 복셀만 count.
-    const geo=new THREE.BoxGeometry(1.12,1.12,1.12), mat=new THREE.MeshStandardMaterial({roughness:0.62,metalness:0.04});
+    // 솔리드 메시: 큐브를 딱 맞닿게(1.0) — 겹침 제거로 회전 시 모서리 z-파이팅(자글자글) 없음, 틈도 없음.
+    const geo=new THREE.BoxGeometry(1.0,1.0,1.0), mat=new THREE.MeshStandardMaterial({roughness:0.62,metalness:0.04});
     mkMesh=new THREE.InstancedMesh(geo,mat,Math.max(1,mkOrder.length));
     const dm=new THREE.Object3D(), col=new THREE.Color();
     for(let i=0;i<mkOrder.length;i++){ const v=mkOrder[i]; dm.position.set(v.x-mkCx,v.y-mkCy,v.z-mkCz); dm.updateMatrix(); mkMesh.setMatrixAt(i,dm.matrix); col.setHex(hexToInt(v.c)); mkMesh.setColorAt(i,col); }
@@ -7077,6 +7077,7 @@
 
   function loadStage(idx){
     stageIndex=idx % STAGES.length;
+    META.level=stageIndex+1;           // 현재 레벨(1-based) → 로비 플레이버튼/이어하기에 사용
     const st=STAGES[stageIndex];
     GAME_CONFIG.ROTATION_SPEED = st.rotationSpeed!==undefined? st.rotationSpeed : GAME_CONFIG.ROTATION_SPEED;
     modelGroup.rotation.y = Math.PI;            // 시작 시 앞면이 카메라(+Z)를 향하게 — .vox 앞면은 -Z라 180° 회전
@@ -7916,7 +7917,7 @@
     applyDiorama();
     initCoins();          // 저장된 코인(META.coins) 반영 or 현재 표시값 파싱
     document.getElementById('loading').classList.add('hidden');
-    loadStage(0);
+    loadStage(Math.max(0, Math.min(STAGES.length-1, (META.level||1)-1)));   // 로비에서 넘겨준 레벨로 이어하기(없으면 1)
     requestAnimationFrame(gameLoop);
     // ===== DEV-ONLY 에디터 API =====
     // window.__EDITOR 가 설정된 에디터 빌드에서만 노출. 배포물(__EDITOR 미설정)에선 죽은 분기 → 무영향(__dbg 패턴 동일).
