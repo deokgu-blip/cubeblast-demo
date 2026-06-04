@@ -4208,6 +4208,7 @@
   #make-btn .cubeicon, #make-btn #make-cubes { position:relative; z-index:1; }
   #make-btn .cubeicon { width:34px; height:34px; background:var(--make-cube, linear-gradient(160deg,#eaf7ff,#5fb8f5)) center/contain no-repeat; filter:drop-shadow(0 2px 2px rgba(0,0,0,.32)); }
   #make-btn.done { filter:brightness(1.08); }
+  #make-btn .mk-continue-txt { position:relative; z-index:1; font-size:26px; letter-spacing:1px; }
   #make-home { position:absolute; right:16px; bottom:64px; z-index:3; width:54px; height:54px; border-radius:50%; border:none; background:rgba(255,255,255,.9); box-shadow:0 4px 0 rgba(0,0,0,.18); font-size:24px; cursor:pointer; display:none; }
   #make-coinpop { position:absolute; left:50%; top:40%; transform:translateX(-50%); z-index:4; font-size:30px; font-weight:900; color:#ffcf3f; text-shadow:0 2px 4px rgba(0,0,0,.4); opacity:0; pointer-events:none; }
   /* 넥스트 버튼 — 코랄/오렌지 글로시(빌드 옐로와 구분) */
@@ -4363,8 +4364,8 @@
 
   const GAME_CONFIG = {
     ROTATION_SPEED: 0.15,
-    BULLET_SPEED: 640,
-    FIRE_INTERVAL: 0.14,
+    BULLET_SPEED: 50,
+    FIRE_INTERVAL: 0.1,
     DEPLOY_FLY_TIME: 0.10,    // 큐→슬롯 점프 시간(초). 점프 느낌만 남기고 거의 즉시 배치
     FAIL_IDLE_SECONDS: 3,
     CONTINUE_COST: 300,            // 게임오버 시 '계속 플레이' 코인 비용
@@ -5623,7 +5624,7 @@
   // ===== octopus blasters (3D, camera-attached) =====
   // scale: 큐보다 큼(슬롯 0.72 > 큐 0.58). yOff: 받침이 슬롯 정중앙에 앉도록 정렬.
   // faceY=Math.PI(180°): 슬롯 권총문어 = 정확한 뒷모습(머리 뒤가 플레이어 정면). 런타임 aimYaw 스윙은 이 기준 주위.
-  const OCTO = { dist:13.003885424585281, spread:0.68, xOff:0.10, yOff:-1.78, scale:0.59, faceY:Math.PI, tiltX:0.18 };
+  const OCTO = { dist:13.003885424585281, spread:0.68, xOff:0.10, yOff:-1.62, scale:0.59, faceY:Math.PI, tiltX:0.18 };
   // 슬롯 줄(탭박스+문어) 전체 위치/간격 — 에디터 조절. x:+오른쪽, y:+위(px), gap:슬롯 간격(px).
   const SLOT_ROW = { x:0, y:57, gap:10 };
   let _slotRowDY = 0;   // SLOT_ROW.y(px)를 투영보정한 3D y 델타(문어가 탭박스 따라 상하 이동)
@@ -5821,6 +5822,7 @@
     const m=new THREE.MeshStandardMaterial({
       vertexColors:true, color:0xffffff,
       roughness:(partName==='body')?0.42:0.5, metalness:0.05,
+      morphTargets:true,    // ★ 'inflate' 모프(머리 부풂) 적용 필수 — 없으면 influence 설정해도 GPU가 변형 안 함(부풂 안 보임)
     });
     m.name=partName;     // 파트명 보존(검증/누수진단/머티리얼별 식별)
     _octoVCMat[partName]=m;
@@ -5948,7 +5950,7 @@
       else infl=Math.sin((t/pumpDur)*Math.PI)*OCTO_PUFF_MAX;
       octo.userData.pumpT=t;
     }
-    if (mm && mm.length){ for (let i=0;i<mm.length;i++){ const inf=mm[i].morphTargetInfluences; if (inf && inf.length) inf[0]=infl; } }
+    if (mm && mm.length && !window.__PUFF_HOLD){ for (let i=0;i<mm.length;i++){ const inf=mm[i].morphTargetInfluences; if (inf && inf.length) inf[0]=infl; } }
     // [ENABLED per user request] 발사 시 조준 회전(aim-rotation-on-fire): 문어가 발사 때 목표 보셀 쪽으로 살짝 yaw 회전.
     //   aimYaw 는 tickCannon 에서 계산(아래 그쪽 주석도 해제됨).
     const wantY=OCTO.faceY + (octo.userData.aimYaw||0);
@@ -6979,7 +6981,7 @@
   function mkAdvanceIfDone(){                    // 현재 디오라마 다 차고 발사체도 없으면 다음 디오라마로
     if(META.filled>=mkCurTotal && mkProj.length===0){
       if(META.di < DIORAMA_SEQ.length-1){ META.di++; META.filled=0; mkBuild(META.di);
-        document.getElementById('make-label').textContent='Hold to Build!'; return true; }
+        { const _ml=document.getElementById('make-label'); _ml.textContent='Hold to Build!'; _ml.style.display=''; } return true; }
       return false;                             // 모든 디오라마 완성
     }
     return true;
@@ -7031,9 +7033,13 @@
   }
   function mkStartHold(e){ if(e) e.preventDefault(); if(!mkActive||mkCubesLeft<=0||mkFinished) return; mkHold=true; mkBtn.classList.add('holding'); mkTick(); if(!mkTimer) mkTimer=setInterval(mkTick,80); }
   function mkStopHold(){ mkHold=false; if(mkTimer){ clearInterval(mkTimer); mkTimer=null; } mkBtn.classList.remove('holding'); syncMeta(); }
-  function mkFinish(){ if(mkFinished) return; mkFinished=true; mkBtn.style.display='none'; syncMeta();
-    // 큐브를 모두 채우면 '계속' 버튼 없이 자동으로 다음 게임으로 진행(완성 연출이 있으면 끝난 뒤).
-    setTimeout(function adv(){ if(!mkActive||!mkFinished) return; if(mkCelebrating){ setTimeout(adv,200); return; } mkExit('next'); }, 700); }
+  function mkFinish(){ if(mkFinished) return; mkFinished=true; syncMeta();
+    // 큐브를 모두 채우면: 같은 초록 버튼 디자인 + 텍스트만 'Continue'. 누르면 다음 스테이지 입장.
+    mkBtn.classList.remove('holding'); mkBtn.classList.add('mk-continue');
+    const cu=document.getElementById('make-cubes'); if(cu) cu.style.display='none';
+    const ci=mkBtn.querySelector('.cubeicon'); if(ci) ci.style.display='none';
+    let lbl=mkBtn.querySelector('.mk-continue-txt'); if(!lbl){ lbl=document.createElement('span'); lbl.className='mk-continue-txt'; mkBtn.appendChild(lbl); } lbl.textContent='Continue'; lbl.style.display='';
+    const ml=document.getElementById('make-label'); if(ml) ml.style.display='none'; }
   function mkExit(action){ mkActive=false; elMake.classList.remove('show'); mkStopHold(); mkClearProjectiles(); syncMeta(); const cb=mkOnExit; mkOnExit=null; if(cb) cb(action); }
   // (고스트는 다음 mkBuild 진입 시 재구성/정리되므로 종료 시 별도 정리 불필요)
   function mkOpen(cubeReward, onExit){
@@ -7043,12 +7049,15 @@
     mkCelebrating=false; mkCelebT=0; mkPopT=0; document.getElementById('make-complete').classList.remove('show');
     if(META.di>=DIORAMA_SEQ.length) META.di=DIORAMA_SEQ.length-1;
     mkBuild(META.di);
-    document.getElementById('make-label').textContent='Hold to Build!';
-    mkBtn.style.display='flex'; mkBtn.classList.remove('holding'); mkNext.style.display='none'; mkHomeBtn.style.display='none';
+    { const _ml=document.getElementById('make-label'); _ml.textContent='Hold to Build!'; _ml.style.display=''; }
+    mkBtn.style.display='flex'; mkBtn.classList.remove('holding','mk-continue'); mkNext.style.display='none'; mkHomeBtn.style.display='none';
+    { const cu=document.getElementById('make-cubes'); if(cu) cu.style.display=''; const ci=mkBtn.querySelector('.cubeicon'); if(ci) ci.style.display=''; const lbl=mkBtn.querySelector('.mk-continue-txt'); if(lbl) lbl.style.display='none'; }
     mkRenderMilestones(); mkUpdateBar(); elMake.classList.add('show'); setTimeout(mkResize,30);
   }
   mkBtn.addEventListener('pointerdown', mkStartHold);
   ['pointerup','pointercancel','pointerleave'].forEach(ev=>mkBtn.addEventListener(ev, ()=>{ if(mkHold) mkStopHold(); }));
+  // 완료 상태(Continue 모드)에서 버튼 탭 → 다음 스테이지 입장
+  mkBtn.addEventListener('click', ()=>{ if(mkFinished && mkActive) mkExit('next'); });
   mkNext.addEventListener('click', ()=>{ if(mkActive) mkExit('next'); });
   mkHomeBtn.addEventListener('click', ()=>{ if(mkActive) mkExit('home'); });
   window.addEventListener('resize', ()=>{ if(mkActive) mkResize(); });
@@ -7132,6 +7141,8 @@
       // 슬롯 문어들의 현재 머리 모프 영향값(부풂 상태 확인용)
       window.__dbgHeadInfl = () => slots.map((s,i)=> s&&s.octo&&s.octo.userData.morphMeshes&&s.octo.userData.morphMeshes.length ?
         { i, infl:+(s.octo.userData.morphMeshes[0].morphTargetInfluences[0]||0).toFixed(3), pumpT:+(s.octo.userData.pumpT).toFixed(3) } : null);
+      // 모프 렌더 검증용: 발사와 무관하게 머리 부풂 influence 를 강제로 고정(비-playing 에디터에선 octoPuffStep이 안 돌아 유지됨)
+      window.__dbgForcePuff = (v=0.6) => { window.__PUFF_HOLD = v>0; let n=0; for(let i=0;i<SLOTS;i++){ const s=slots[i]; if(s&&s.octo&&s.octo.userData.morphMeshes){ s.octo.userData.morphMeshes.forEach(m=>{ if(m.morphTargetInfluences&&m.morphTargetInfluences.length){ m.morphTargetInfluences[0]=v; n++; } }); } } return {set:v, hold:window.__PUFF_HOLD, meshes:n}; };
       // 발사 반동 떨림 검증: 슬롯 문어들의 recoilT 상태 + 현재 위치 오프셋(base 대비) 반환.
       window.__dbgRecoil = () => slots.map((s,i)=> s&&s.octo ? {
         i, recoilT:+(s.octo.userData.recoilT!==undefined?s.octo.userData.recoilT:-1).toFixed(3),
