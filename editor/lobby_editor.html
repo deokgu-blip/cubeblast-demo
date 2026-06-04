@@ -48,7 +48,7 @@
   .view.active{display:block;}
   #homecv{position:absolute;left:0;top:0;width:100%;height:100%;z-index:1;display:block;}
   /* 현재 디오라마 진행바 — PLAY 바로 위 (이름/설명 텍스트는 제거) */
-  #curInfo{position:absolute;left:50%;transform:translateX(-50%);bottom:212px;z-index:6;text-align:center;pointer-events:none;}
+  #curInfo{position:absolute;left:50%;transform:translateX(-50%);top:calc(120px + env(safe-area-inset-top));z-index:6;text-align:center;pointer-events:none;}
   /* 진행바 */
   #curBarWrap{width:188px;height:12px;margin:0 auto;border-radius:7px;background:rgba(8,20,42,.5);
               box-shadow:inset 0 1px 3px rgba(0,0,0,.4);overflow:hidden;}
@@ -100,8 +100,8 @@
   #collCount{position:absolute;left:0;right:0;bottom:34px;text-align:center;z-index:5;pointer-events:none;
         font-family:'Jua',sans-serif;font-size:15px;color:#fff;opacity:.9;text-shadow:0 1px 3px rgba(0,0,0,.5);}
   #collEmpty{position:absolute;left:0;right:0;top:46%;transform:translateY(-50%);text-align:center;color:#fff;
-             text-shadow:0 2px 0 rgba(8,40,80,.5);display:none;}
-  #collEmpty .ic{font-size:54px;}#collEmpty .t{font-size:16px;font-weight:900;margin-top:8px;}
+             font-family:'PixelifySans','BlackHanSans','Jua',sans-serif;text-shadow:0 2px 0 rgba(8,40,80,.5);display:none;}
+  #collEmpty .ic{font-size:72px;line-height:1;color:#9fc3ee;}#collEmpty .t{font-size:16px;font-weight:900;margin-top:8px;}
   #collEmpty .s{font-size:13px;font-weight:700;opacity:.9;margin-top:6px;}
 
   /* game iframe */
@@ -110,7 +110,7 @@
   #gameframe{width:100%;height:100%;border:none;display:block;}
   #toast{position:fixed;left:50%;bottom:160px;transform:translateX(-50%) translateY(20px);background:#13315cee;color:#fff;font-weight:800;padding:9px 16px;border-radius:10px;opacity:0;transition:.2s;z-index:80;pointer-events:none;}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-</style><link rel="stylesheet" href="editor.css?v=1780585613">
+</style><link rel="stylesheet" href="editor.css?v=1780586833">
 <script>window.__EDITOR=true;window.__EDITOR_CONFIG={
  "config": {
   "BULLET_SPEED": 50,
@@ -166,10 +166,6 @@
   },
   "make-label": {
    "dy": -21
-  },
-  "make-btn": {
-   "dy": -39,
-   "dx": -117
   },
   "make-next": {
    "hidden": true
@@ -233,7 +229,7 @@
       <button id="collNext" class="collArrow" data-edit-id="lobby-coll-next" aria-label="다음"><svg viewBox="0 0 24 24"><path d="M8.59 16.59 10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg></button>
       <div id="collName" data-edit-id="lobby-coll-name"></div>
       <div id="collCount" data-edit-id="lobby-coll-count"></div>
-      <div id="collEmpty"><div class="ic">📦</div><div class="t">No dioramas yet</div><div class="s">Complete dioramas to collect them here</div></div>
+      <div id="collEmpty"><div class="ic">?</div><div class="t">No dioramas yet</div><div class="s">Complete dioramas to collect them here</div></div>
     </div>
   </div>
 
@@ -325,8 +321,11 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
     const rim=new THREE.DirectionalLight(0xcfe8ff,0.4); rim.position.set(-0.85,0.35,-0.95); hS.add(rim);
     (function loop(){ hRAF=requestAnimationFrame(loop);
       if(!views.home.classList.contains('active')) return;
-      if(hModel) hModel.rotation.y-=0.005;   // 모델만 회전. 회전속도 = 제작화면과 동일(0.005)
-      hR.render(hS,hC); })();
+      hR.render(hS,hC); })();   // 자동회전 제거 — 정면 고정, 회전은 드래그로만
+    if(!homecv._dragWired){ homecv._dragWired=true; let dg=false,lx=0;
+      homecv.addEventListener('pointerdown',e=>{dg=true;lx=e.clientX;try{homecv.setPointerCapture(e.pointerId);}catch(_){}});
+      homecv.addEventListener('pointermove',e=>{ if(!dg||!hModel)return; hModel.rotation.y+=(e.clientX-lx)*0.012; lx=e.clientX; });
+      ['pointerup','pointercancel','pointerleave'].forEach(ev=>homecv.addEventListener(ev,()=>{dg=false;})); }
   }
   function buildHome(){
     hEnsure();
@@ -473,5 +472,5 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
 
   render();
 })();
-</script><script src="lobby_editor_addon.js?v=1780585613"></script>
+</script><script src="lobby_editor_addon.js?v=1780586833"></script>
 </body></html>
