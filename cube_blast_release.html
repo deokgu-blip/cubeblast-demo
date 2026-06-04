@@ -6850,9 +6850,9 @@
   // ===== 디오라마 제작 화면 (클리어 직후, 자체 Three.js 씬) =====
   const elMake=document.getElementById('make-overlay'), mkCanvas=document.getElementById('make-canvas');
   const mkBtn=document.getElementById('make-btn'), mkNext=document.getElementById('make-next'), mkHomeBtn=document.getElementById('make-home');
-  let mkRenderer,mkScene,mkCam,mkMesh,mkGhost=null,mkRAF, mkOrder=null, mkCur=-1, mkActive=false, mkBase=null, mkShadow=null;
+  let mkRenderer,mkScene,mkCam,mkMesh,mkGhost=null,mkRAF, mkOrder=null, mkCur=-1, mkActive=false, mkBase=null, mkShadow=null, mkBnd=null;
   let mkHold=false, mkCubesLeft=0, mkTimer=null, mkOnExit=null, mkFinished=false, mkMsEls=null;
-  let mkCx=0,mkCy=0,mkCz=0, mkCurTotal=1, mkDropH=8, mkProj=[], _mkLast=0;
+  let mkCx=0,mkCy=0,mkCz=0, mkCurTotal=1, mkDropH=8, mkProj=[], _mkLast=0, _mkLastW=0, _mkLastH=0;
   let mkCelebrating=false, mkCelebT=0, mkPopT=0;       // 디오라마 완성 연출
   const MK_DROP_CAP=20, MK_DROP_DUR=0.16;        // 동시 블록 수(가속 대비 ↑) / 스냅 시간(짧게 → 자석처럼 빠르게 착)
   const MK_DROP_MAX_PT=8, MK_DROP_ACCEL=0.16;    // tick당 최대 스폰수 / 가속률 — 제작이 진행될수록 점점 빨리 떨어짐(max 캡)
@@ -6873,10 +6873,27 @@
     const rim=new THREE.DirectionalLight(0xcfe8ff,0.4); rim.position.set(-0.85,0.35,-0.95); mkScene.add(rim); // 뒤쪽 림라이트(실루엣 분리)
     (function loop(){ mkRAF=requestAnimationFrame(loop);
       const now=performance.now()*0.001; let dt=_mkLast?Math.min(0.05, now-_mkLast):0.016; _mkLast=now;
-      if(mkActive){ if(mkMesh) mkMesh.rotation.y-=0.012; if(mkGhost) mkGhost.rotation.y=mkMesh?mkMesh.rotation.y:mkGhost.rotation.y; mkStepFX(dt); mkRenderer.render(mkScene,mkCam); }
+      if(mkActive){
+        // 캔버스 크기가 바뀌면(표시 직후 레이아웃·창 리사이즈) 즉시 재프레이밍 → 가로 늘어남 방지
+        const cw=mkCanvas.clientWidth, ch=mkCanvas.clientHeight;
+        if(cw&&ch&&(cw!==_mkLastW||ch!==_mkLastH)){ _mkLastW=cw; _mkLastH=ch; mkResize(); }
+        if(mkMesh) mkMesh.rotation.y-=0.012; if(mkGhost) mkGhost.rotation.y=mkMesh?mkMesh.rotation.y:mkGhost.rotation.y; mkStepFX(dt); mkRenderer.render(mkScene,mkCam);
+      }
     })();
   }
-  function mkResize(){ if(!mkRenderer)return; const w=mkCanvas.clientWidth||DESIGN_W,h=mkCanvas.clientHeight||DESIGN_H; mkRenderer.setPixelRatio(Math.min(2,devicePixelRatio||1)); mkRenderer.setSize(w,h,false); mkCam.aspect=w/h; mkCam.updateProjectionMatrix(); }
+  function mkResize(){
+    if(!mkRenderer) return;
+    const w=mkCanvas.clientWidth, h=mkCanvas.clientHeight;
+    if(!w||!h) return;                       // 레이아웃 전(0크기)이면 스킵 — 잘못된 비율로 버퍼 잡혀 '가로로 늘어나는' 버그 방지
+    mkRenderer.setPixelRatio(Math.min(2,devicePixelRatio||1)); mkRenderer.setSize(w,h,false);
+    mkCam.aspect=w/h; mkCam.updateProjectionMatrix();
+    if(!mkBnd) return;
+    // 받침대 없음(제작화면=모델만). 모델 중심(0,0,0) 정면 프레이밍 — 현재 캔버스 비율 기준이라 안 늘어남.
+    const b=mkBnd, horizR=Math.max(b.mxx-b.mnx, b.mxz-b.mnz)/2 + 0.8, spanY=(b.mxy-b.mny)+1;
+    const R=Math.max(horizR*1.1, spanY*0.55)*0.96, vf=mkCam.fov*Math.PI/180;
+    const dV=R/Math.tan(vf/2), hf=2*Math.atan(Math.tan(vf/2)*mkCam.aspect), dH=R/Math.tan(hf/2);
+    mkCam.position.set(0, 0, Math.max(dV,dH)); mkCam.lookAt(0, 0, 0);
+  }
   function mkClearProjectiles(){ for(const p of mkProj){ mkScene.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh.material.dispose(); } mkProj.length=0; }
   function mkDisposeGhost(){ if(mkGhost){ mkScene.remove(mkGhost); mkGhost.geometry.dispose(); mkGhost.material.dispose(); mkGhost=null; } }
   // 안 채운 복셀(중앙→바깥 순서의 filled 이후)만 투명 고스트로 재구성. 로비 makeGhost 와 동일 스펙.
@@ -6922,35 +6939,10 @@
     mkMesh.instanceMatrix.needsUpdate=true; if(mkMesh.instanceColor) mkMesh.instanceColor.needsUpdate=true;
     mkScene.add(mkMesh);
     mkBuildGhost();   // 고스트(미충전 복셀): 전체 모델이 반투명으로 미리 보임
-    // 글로시한 파란/흰 받침대(브롤톤) + 접지 그림자 — 전시 무대
-    const horizR=Math.max(mxx-mnx, mxz-mnz)/2 + 1.0;
-    const baseTopY=(mny-mkCy)-0.46;                                   // 모델 최하단 큐브의 바닥
-    const tierH=Math.max(0.42, horizR*0.17);
-    mkBase=new THREE.Group();
-    // 받침 본체: 짧고 넓은 단일 실린더 (연파랑, 글로시)
-    const daisH=tierH*2.4, rtop=horizR*1.10, rbot=horizR*1.42;
-    const dais=new THREE.Mesh(new THREE.CylinderGeometry(rtop, rbot, daisH, 48),
-              new THREE.MeshStandardMaterial({color:0x8ec3f0, roughness:.7, metalness:0}));
-    dais.position.y=baseTopY - daisH/2; mkBase.add(dais);
-    // 윗면 테두리 림: 밝은 흰~연파랑으로 위쪽을 강조
-    const rim=new THREE.Mesh(new THREE.CylinderGeometry(rtop*1.04, rtop*1.04, tierH*0.5, 48),
-              new THREE.MeshStandardMaterial({color:0xdcecff, roughness:.65, metalness:0}));
-    rim.position.y=baseTopY - tierH*0.2; mkBase.add(rim);
-    // 윗판(디오라마가 앉는 면): 밝은 흰빛
-    const top=new THREE.Mesh(new THREE.CylinderGeometry(rtop*1.0, rtop*1.0, tierH*0.22, 48),
-              new THREE.MeshStandardMaterial({color:0xf6faff, roughness:.6, metalness:0}));
-    top.position.y=baseTopY + tierH*0.06; mkBase.add(top);
-    mkScene.add(mkBase);
-    mkShadow=new THREE.Mesh(new THREE.CircleGeometry(horizR*0.9, 40),
-                            new THREE.MeshBasicMaterial({map:mkShadowTexture(), transparent:true, depthWrite:false}));
-    mkShadow.rotation.x=-Math.PI/2; mkShadow.position.set(0, baseTopY+0.05, 0); mkScene.add(mkShadow);
-    const ext=Math.max(mxx-mnx,mxy-mny,mxz-mnz)+1;
-    const modelTopY=(mxy-mkCy), daisBotY=baseTopY-daisH, cY=(modelTopY+daisBotY)/2, spanY=modelTopY-daisBotY;
-    const R=Math.max(horizR*1.12, spanY*0.42)*0.80, vf=mkCam.fov*Math.PI/180;   // 프레이밍 여유 축소 → 디오라마 훨씬 크게(쌓이는 게 잘 보이게)
+    // 제작화면은 '받침대 없음'(사용자 요청). 모델 경계만 저장 → mkResize() 가 현재 캔버스 비율로 정면 프레이밍(안 늘어남).
+    mkBnd={mnx,mny,mnz,mxx,mxy,mxz};
+    const ext=Math.max(mxx-mnx,mxy-mny,mxz-mnz)+1; mkDropH = ext*0.55;
     mkResize();
-    const dV=R/Math.tan(vf/2), hf=2*Math.atan(Math.tan(vf/2)*mkCam.aspect), dH=R/Math.tan(hf/2);
-    mkCam.position.set(0, cY+spanY*0.06, Math.max(dV,dH)); mkCam.lookAt(0, cY, 0);
-    mkDropH = ext*0.55;                                  // 블록이 타겟 위 이 높이에서 떨어지기 시작
   }
   function mkTotal(){ return mkCurTotal||1; }
   function mkPct(){ return Math.min(1, META.filled/mkTotal()); }
