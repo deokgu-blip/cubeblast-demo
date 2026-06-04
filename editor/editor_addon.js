@@ -424,7 +424,7 @@
     return document.querySelector('[data-edit-id="'+id+'"]');
   }
   function uiObj(id){ cfg.ui=cfg.ui||{}; return (cfg.ui[id]=cfg.ui[id]||{}); }
-  function hasOv(o){ return o && (o.dx||o.dy||o.w||o.h||(o.scale&&o.scale!==1)||o.rot||o.font||o.asset); }
+  function hasOv(o){ return o && (o.dx||o.dy||o.w||o.h||(o.scale&&o.scale!==1)||o.rot||o.font||o.asset||o.hidden); }
 
   // ---- 적용: transform(이동/크기/회전) + 폰트 + 이미지 교체 ----
   function applyUI(id){
@@ -438,6 +438,7 @@
     }
     const els=document.querySelectorAll('[data-edit-id="'+id+'"]'); if(!els.length) return;
     els.forEach(el2=>{
+      el2.style.display = o.hidden ? 'none' : '';      // 숨김(삭제) — 게임/로비에서도 동일 적용
       const parts=[];
       if (o.dx||o.dy) parts.push('translate('+(o.dx||0)+'px,'+(o.dy||0)+'px)');
       if (o.rot) parts.push('rotate('+o.rot+'deg)');
@@ -611,9 +612,15 @@
         fileIn.addEventListener('change', ()=>{ if(fileIn.files[0]) setImg(fileIn.files[0]); });
         uiBar.appendChild(dz);
       }
-      const rb=el('span','ed-uibtn','↺ 이 요소 리셋'); rb.onclick=()=>{ uiPushUndo(uiSel.id); const e2=elById(uiSel.id); cfg.ui[uiSel.id]={}; if(e2){e2.style.transform='';e2.style.fontSize='';e2.style.width='';e2.style.height='';e2.style.backgroundImage='';} if(uiSel.id[0]==='@'&&meta.bgvar) document.documentElement.style.removeProperty(meta.bgvar); uiOutlineUpdate(); buildUIBar(); buildTreeDots(); };
+      if (uiSel.id[0]!=='@'){
+        const isHidden=!!uiObj(uiSel.id).hidden;
+        const hb=el('span','ed-uibtn', isHidden?'👁 다시 표시':'🚫 숨기기(삭제)'); if(isHidden) hb.classList.add('on');
+        hb.onclick=()=>{ uiPushUndo(uiSel.id); const o2=uiObj(uiSel.id); o2.hidden=!o2.hidden; applyUI(uiSel.id); uiOutlineUpdate(); buildUIBar(); buildTreeDots(); flash(o2.hidden?'숨김(게임에서 안 보임)':'다시 표시'); };
+        uiBar.appendChild(hb);
+      }
+      const rb=el('span','ed-uibtn','↺ 이 요소 리셋'); rb.onclick=()=>{ uiPushUndo(uiSel.id); const e2=elById(uiSel.id); cfg.ui[uiSel.id]={}; if(e2){e2.style.transform='';e2.style.fontSize='';e2.style.width='';e2.style.height='';e2.style.backgroundImage='';e2.style.display='';} if(uiSel.id[0]==='@'&&meta.bgvar) document.documentElement.style.removeProperty(meta.bgvar); uiOutlineUpdate(); buildUIBar(); buildTreeDots(); };
       uiBar.appendChild(rb);
-      uiBar.appendChild(el('div','ed-tip','목록 선택 → 외곽 드래그=이동 · ◣크기 · ↻회전 · 숫자 직접입력 · 이미지 드롭으로 교체'));
+      uiBar.appendChild(el('div','ed-tip','목록 선택 → 외곽 드래그=이동 · ◣크기 · ↻회전 · 숫자입력 · 이미지 드롭 교체 · 🚫숨기기'));
     }
   }
   function buildTreeDots(){ if(!uiTreeWrap)return; uiTreeWrap.querySelectorAll('.ed-tree-item').forEach(b=>{ const d=b.querySelector('.ed-tree-dot'); if(d) d.classList.toggle('on', hasOv(uiObj(b.dataset.id))); }); }
