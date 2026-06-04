@@ -11,6 +11,7 @@
     {grp:'상단(코인/컬렉션/설정)', items:[
       {id:'lobby-top',      label:'상단바 전체'},
       {id:'lobby-coinbar',  label:'· 코인바 전체'},
+      {id:'lobby-coin-bg',  label:'·· 숫자배경', img:true},
       {id:'lobby-coin-icon',label:'·· 코인 아이콘', img:true},
       {id:'lobby-coinval',  label:'·· 코인 숫자', font:true},
       {id:'lobby-collbtn',  label:'· 컬렉션 버튼', img:true},
