@@ -252,9 +252,12 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
     const dl=new THREE.DirectionalLight(0xffffff,0.9); dl.position.set(0.7,1.25,0.85); hS.add(dl);
     const rim=new THREE.DirectionalLight(0xcfe8ff,0.4); rim.position.set(-0.85,0.35,-0.95); hS.add(rim);
     if(hRAF) cancelAnimationFrame(hRAF);   // 기존 루프 취소 → buildHome 재호출 시 렌더루프 중첩(다중 렌더) 방지
-    (function loop(){ hRAF=requestAnimationFrame(loop);
-      if(!views.home.classList.contains('active') || wrap.classList.contains('show')) return;   // 게임(iframe) 표시 중엔 홈 렌더 중단 → 인게임과 GPU 경쟁 방지(프레임드랍 핵심원인)
-      hR.render(hS,hC); })();   // 자동회전 제거 — 정면 고정, 회전은 드래그로만
+    var _hLast=0;
+    (function loop(t){ hRAF=requestAnimationFrame(loop);
+      if(!views.home.classList.contains('active') || wrap.classList.contains('show')){ _hLast=t||0; return; }   // 게임(iframe) 표시 중엔 홈 렌더 중단(프레임드랍 방지)
+      var dt=_hLast?Math.min(0.05,((t||0)-_hLast)/1000):0.016; _hLast=t||0;
+      if(hModel) hModel.rotation.y += 0.30*dt;   // 천천히 자동회전(~0.3 rad/s) — 현재 방향(Math.PI 정면)에서 이어서 회전. 드래그도 가능.
+      hR.render(hS,hC); })();
     if(!homecv._dragWired){ homecv._dragWired=true; let dg=false,lx=0;
       homecv.addEventListener('pointerdown',e=>{dg=true;lx=e.clientX;try{homecv.setPointerCapture(e.pointerId);}catch(_){}});
       homecv.addEventListener('pointermove',e=>{ if(!dg||!hModel)return; hModel.rotation.y+=(e.clientX-lx)*0.012; lx=e.clientX; });
@@ -378,7 +381,7 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
   const elCoin=document.getElementById('coinval');
   function fmtCoins(v){ return v>=1000?(v/1000).toFixed(2)+'K':String(v|0); }
   const wrap=document.getElementById('gamewrap'), frame=document.getElementById('gameframe');
-  function startGame(){ location.href='cube_blast_release.html?v=1780645840&meta='+encodeURIComponent(JSON.stringify(META)); }   // 전체 페이지 전환(iframe 미사용) → 플레이 중 로비 완전 언로드 = GPU 경쟁 0(voxel-drop과 동일 구조)
+  function startGame(){ location.href='cube_blast_release.html?v=1780656536&meta='+encodeURIComponent(JSON.stringify(META)); }   // 전체 페이지 전환(iframe 미사용) → 플레이 중 로비 완전 언로드 = GPU 경쟁 0(voxel-drop과 동일 구조)
   play.onclick=function(){ if(window.lobbyTap) window.lobbyTap(); startGame(); };
   function closeGame(){ wrap.classList.remove('show'); frame.src='about:blank'; render(); }
   window.addEventListener('message', e=>{ const d=e.data; if(!d||typeof d!=='object') return;
