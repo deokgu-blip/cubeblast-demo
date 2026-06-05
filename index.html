@@ -251,8 +251,9 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
     hS.add(new THREE.AmbientLight(0xffffff,0.30));
     const dl=new THREE.DirectionalLight(0xffffff,0.9); dl.position.set(0.7,1.25,0.85); hS.add(dl);
     const rim=new THREE.DirectionalLight(0xcfe8ff,0.4); rim.position.set(-0.85,0.35,-0.95); hS.add(rim);
+    if(hRAF) cancelAnimationFrame(hRAF);   // 기존 루프 취소 → buildHome 재호출 시 렌더루프 중첩(다중 렌더) 방지
     (function loop(){ hRAF=requestAnimationFrame(loop);
-      if(!views.home.classList.contains('active')) return;
+      if(!views.home.classList.contains('active') || wrap.classList.contains('show')) return;   // 게임(iframe) 표시 중엔 홈 렌더 중단 → 인게임과 GPU 경쟁 방지(프레임드랍 핵심원인)
       hR.render(hS,hC); })();   // 자동회전 제거 — 정면 고정, 회전은 드래그로만
     if(!homecv._dragWired){ homecv._dragWired=true; let dg=false,lx=0;
       homecv.addEventListener('pointerdown',e=>{dg=true;lx=e.clientX;try{homecv.setPointerCapture(e.pointerId);}catch(_){}});
@@ -377,7 +378,7 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
   const elCoin=document.getElementById('coinval');
   function fmtCoins(v){ return v>=1000?(v/1000).toFixed(2)+'K':String(v|0); }
   const wrap=document.getElementById('gamewrap'), frame=document.getElementById('gameframe');
-  function startGame(){ frame.src='cube_blast_release.html?v=1780625041&meta='+encodeURIComponent(JSON.stringify(META)); wrap.classList.add('show'); }
+  function startGame(){ frame.src='cube_blast_release.html?v=1780625897&meta='+encodeURIComponent(JSON.stringify(META)); wrap.classList.add('show'); }
   play.onclick=function(){ if(window.lobbyTap) window.lobbyTap(); startGame(); };
   function closeGame(){ wrap.classList.remove('show'); frame.src='about:blank'; render(); }
   window.addEventListener('message', e=>{ const d=e.data; if(!d||typeof d!=='object') return;
@@ -391,7 +392,7 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
   function render(){
     elCoin.textContent=fmtCoins(META.coins||0);
     play.innerHTML='<span class="plv">LEVEL '+(META.level||1)+'</span><span class="ptxt">PLAY</span>';   // 플레이 버튼에 현재 레벨 표기
-    if(curView==='home') buildHome();
+    if(curView==='home'){ if(!wrap.classList.contains('show')) buildHome(); }   // 게임 플레이 중(iframe 표시)엔 홈 재빌드/루프 재시작 안 함 → GPU 경쟁·루프 중첩 방지
     else buildColl();
   }
   window.addEventListener('resize',()=>{ if(curView==='home') buildHome(); else buildColl(); });
