@@ -378,7 +378,7 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#ff0537", "yellow": "#ffe40a", 
   const elCoin=document.getElementById('coinval');
   function fmtCoins(v){ return v>=1000?(v/1000).toFixed(2)+'K':String(v|0); }
   const wrap=document.getElementById('gamewrap'), frame=document.getElementById('gameframe');
-  function startGame(){ location.href='cube_blast_release.html?v=1780637991&meta='+encodeURIComponent(JSON.stringify(META)); }   // 전체 페이지 전환(iframe 미사용) → 플레이 중 로비 완전 언로드 = GPU 경쟁 0(voxel-drop과 동일 구조)
+  function startGame(){ location.href='cube_blast_release.html?v=1780639036&meta='+encodeURIComponent(JSON.stringify(META)); }   // 전체 페이지 전환(iframe 미사용) → 플레이 중 로비 완전 언로드 = GPU 경쟁 0(voxel-drop과 동일 구조)
   play.onclick=function(){ if(window.lobbyTap) window.lobbyTap(); startGame(); };
   function closeGame(){ wrap.classList.remove('show'); frame.src='about:blank'; render(); }
   window.addEventListener('message', e=>{ const d=e.data; if(!d||typeof d!=='object') return;
@@ -420,11 +420,14 @@ window.LOBBY_AUDIO={"bgm_lobby": "data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAA
   function lsGet(k,d){try{var v=localStorage.getItem(k);return v==null?d:(v==='1');}catch(e){return d;}}
   function lsSet(k,on){try{localStorage.setItem(k,on?'1':'0');}catch(e){}}
   var SET={sfx:lsGet('cb_sfx',true),bgm:lsGet('cb_bgm',true),haptic:lsGet('cb_haptic',true)};
-  var LA=window.LOBBY_AUDIO||{},_bgm=null,_tap=null,_st=false;
-  function aLoad(){ if(!_bgm&&LA.bgm_lobby){try{_bgm=new Audio(LA.bgm_lobby);_bgm.loop=true;_bgm.volume=0.85;}catch(e){}} if(!_tap&&LA.sfx_tap){try{_tap=new Audio(LA.sfx_tap);}catch(e){}} }
-  function aBgm(on){ if(!_bgm)aLoad(); if(!_bgm)return; if(on){var p=_bgm.play();if(p&&p.catch)p.catch(function(){});}else _bgm.pause(); }
-  window.lobbyTap=function(){ if(!SET.sfx)return; if(!_tap)aLoad(); if(!_tap)return; try{var a=_tap.cloneNode();a.volume=0.55;var p=a.play();if(p&&p.catch)p.catch(function(){});}catch(e){} };
-  function unlock(){ if(_st)return; _st=true; aLoad(); if(SET.bgm)aBgm(true); }
+  // ★Web Audio API: HTML5 <audio> 의 iOS 메인스레드 stall 회피(인게임과 동일 방식). 1회 디코드 후 BufferSource 재생.
+  var LA=window.LOBBY_AUDIO||{},_ctx=null,_master=null,_bgmGain=null,_bgmSrc=null,_buf={},_st=false;
+  function _u2b(u){var i=u.indexOf(',');var b=atob(u.slice(i+1)),n=b.length,a=new Uint8Array(n);for(var j=0;j<n;j++)a[j]=b.charCodeAt(j);return a.buffer;}
+  function _ctxEnsure(){ if(_ctx)return _ctx; try{var AC=window.AudioContext||window.webkitAudioContext; if(!AC)return null; _ctx=new AC(); _master=_ctx.createGain(); _master.connect(_ctx.destination); _bgmGain=_ctx.createGain(); _bgmGain.gain.value=0.85; _bgmGain.connect(_master);}catch(e){_ctx=null;} return _ctx; }
+  function aLoad(){ if(!_ctxEnsure())return; for(var k in LA){ if(_buf[k]!==undefined)continue; _buf[k]=null; (function(key){ try{ _ctx.decodeAudioData(_u2b(LA[key]), function(b){_buf[key]=b; if(key==='bgm_lobby'&&SET.bgm)aBgm(true);}, function(){}); }catch(e){} })(k); } }
+  function aBgm(on){ if(on){ if(!_ctxEnsure())return; if(_bgmSrc)return; var b=_buf['bgm_lobby']; if(!b)return; try{ if(_ctx.state==='suspended')_ctx.resume(); _bgmSrc=_ctx.createBufferSource(); _bgmSrc.buffer=b; _bgmSrc.loop=true; _bgmSrc.connect(_bgmGain); _bgmSrc.start(0);}catch(e){} } else { if(_bgmSrc){try{_bgmSrc.stop();}catch(e){}_bgmSrc=null;} } }
+  window.lobbyTap=function(){ if(!SET.sfx)return; if(!_ctx){_ctxEnsure();aLoad();} if(!_ctx)return; var b=_buf['sfx_tap']; if(!b)return; try{ if(_ctx.state==='suspended')_ctx.resume(); var s=_ctx.createBufferSource(); s.buffer=b; var g=_ctx.createGain(); g.gain.value=0.55; s.connect(g); g.connect(_master); s.start(0);}catch(e){} };
+  function unlock(){ if(_st)return; _st=true; if(!_ctxEnsure())return; if(_ctx.state==='suspended')_ctx.resume(); aLoad(); }
   ['pointerdown','touchend','keydown','click'].forEach(function(ev){window.addEventListener(ev,unlock,true);});
   var el=document.getElementById('lobby-settings');
   function sync(){ document.getElementById('ls-sfx').classList.toggle('on',SET.sfx); document.getElementById('ls-bgm').classList.toggle('on',SET.bgm); document.getElementById('ls-haptic').classList.toggle('on',SET.haptic); }
