@@ -381,7 +381,7 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#cc2a1a", "yellow": "#ffe40a", 
   const elCoin=document.getElementById('coinval');
   function fmtCoins(v){ return v>=1000?(v/1000).toFixed(2)+'K':String(v|0); }
   const wrap=document.getElementById('gamewrap'), frame=document.getElementById('gameframe');
-  function startGame(){ location.href='cube_blast_release.html?v=1780669724&meta='+encodeURIComponent(JSON.stringify(META)); }   // 전체 페이지 전환(iframe 미사용) → 플레이 중 로비 완전 언로드 = GPU 경쟁 0(voxel-drop과 동일 구조)
+  function startGame(){ location.href='cube_blast_release.html?v=1780753251&meta='+encodeURIComponent(JSON.stringify(META)); }   // 전체 페이지 전환(iframe 미사용) → 플레이 중 로비 완전 언로드 = GPU 경쟁 0(voxel-drop과 동일 구조)
   play.onclick=function(){ if(window.lobbyTap) window.lobbyTap(); startGame(); };
   function closeGame(){ wrap.classList.remove('show'); frame.src='about:blank'; render(); }
   window.addEventListener('message', e=>{ const d=e.data; if(!d||typeof d!=='object') return;
