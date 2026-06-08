@@ -279,7 +279,7 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#cc2a1a", "yellow": "#ffe40a", 
     (function loop(t){ hRAF=requestAnimationFrame(loop);
       if(!views.home.classList.contains('active') || wrap.classList.contains('show')){ _hLast=t||0; return; }   // 게임(iframe) 표시 중엔 홈 렌더 중단(프레임드랍 방지)
       var dt=_hLast?Math.min(0.05,((t||0)-_hLast)/1000):0.016; _hLast=t||0;
-      if(hModel) hModel.rotation.y += 0.30*dt;   // 천천히 자동회전(~0.3 rad/s) — 현재 방향(Math.PI 정면)에서 이어서 회전. 드래그도 가능.
+      if(hModel) hModel.rotation.y -= 0.30*dt;   // 시계방향 자동회전(위에서 볼 때, rotation.y 감소=시계방향 — 인게임과 동일). 드래그 가능.
       hR.render(hS,hC); })();
     if(!homecv._dragWired){ homecv._dragWired=true; let dg=false,lx=0;
       homecv.addEventListener('pointerdown',e=>{dg=true;lx=e.clientX;try{homecv.setPointerCapture(e.pointerId);}catch(_){}});
@@ -404,7 +404,7 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#cc2a1a", "yellow": "#ffe40a", 
   const elCoin=document.getElementById('coinval');
   function fmtCoins(v){ return v>=1000?(v/1000).toFixed(2)+'K':String(v|0); }
   const wrap=document.getElementById('gamewrap'), frame=document.getElementById('gameframe');
-  function startGame(){ location.href='cube_blast_release.html?v=1780882927&meta='+encodeURIComponent(JSON.stringify(META)); }   // 전체 페이지 전환(iframe 미사용) → 플레이 중 로비 완전 언로드 = GPU 경쟁 0(voxel-drop과 동일 구조)
+  function startGame(){ location.href='cube_blast_release.html?v=1780884369&meta='+encodeURIComponent(JSON.stringify(META)); }   // 전체 페이지 전환(iframe 미사용) → 플레이 중 로비 완전 언로드 = GPU 경쟁 0(voxel-drop과 동일 구조)
   play.onclick=function(){ if(window.lobbyTap) window.lobbyTap(); startGame(); };
   function closeGame(){ wrap.classList.remove('show'); frame.src='about:blank'; render(); }
   window.addEventListener('message', e=>{ const d=e.data; if(!d||typeof d!=='object') return;
