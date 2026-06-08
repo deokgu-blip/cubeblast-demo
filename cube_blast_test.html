@@ -1626,21 +1626,16 @@
   const _WORLD_UP = new THREE.Vector3(0,1,0);
   const _WORLD_RIGHT = new THREE.Vector3(1,0,0);
   const _qd = new THREE.Quaternion();   // 증분 회전 누적용
-  // ★ 회전 = 증분 쿼터니언 '트랙볼': 모든 입력/자동회전을 modelGroup.quaternion 에 '로컬축 post-multiply' 로 누적.
-  //   - 상하 드래그(pitch) = 로컬 right 축 → 모델이 돌아간 방향 기준으로 현재 위치에서 위/아래 기울임(사용자 확인 완료).
-  //   - 자동회전·좌우 드래그(yaw) = 로컬 up 축 → 모델을 눕혀놓으면 로컬 up 이 안 움직여 '눕혀진 각도를 유지'한 채
-  //     카메라 시점 기준 화면 평면에서 시계방향으로 돈다(눕힐수록 로컬 up 이 카메라를 향함).
-  //   pitch 누적값만 ±0.9 클램프(과회전 방지). Euler 미사용 단일표현(quaternion) → 짐벌 뒤집힘 없음.
-  //   매 회전마다 normalize() 로 장시간 자동회전의 부동소수 드리프트 방지.
-  let modelPitchAccum = 0, modelSpinTotal = 0;   // pitch 누적(클램프용) / 자동회전 누적각(디버그 검증용)
-  const PITCH_LIMIT = 0.9;
-  function resetModelRot(){ modelGroup.quaternion.setFromAxisAngle(_WORLD_UP, Math.PI); modelPitchAccum = 0; }  // 앞면이 카메라(+Z)를 향함(.vox 앞면 -Z라 180°)
-  function rotateModelYaw(d){ _qd.setFromAxisAngle(_WORLD_UP, d); modelGroup.quaternion.multiply(_qd).normalize(); }   // 로컬 up 축(좌우/자동)
-  function rotateModelPitch(dy){                                                                                       // 로컬 right 축 + 누적 클램프
-    const np = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, modelPitchAccum + dy));
-    const ap = np - modelPitchAccum; modelPitchAccum = np;
-    if (ap !== 0){ _qd.setFromAxisAngle(_WORLD_RIGHT, ap); modelGroup.quaternion.multiply(_qd).normalize(); }
-  }
+  // ★ 회전 = 증분 쿼터니언 트랙볼(카메라/화면 고정축 기준): 모든 입력/자동회전을 modelGroup.quaternion 에
+  //   '월드축 pre-multiply' 로 누적한다(= 카메라 시점 고정축). 모델이 앞/뒤/옆 어디를 보든:
+  //   - 상하 드래그(pitch) = 월드 right 축(화면 수평) → 항상 '위로 드래그=화면 위로'(옆면 보면 옆면이 위로 들림).
+  //   - 자동회전·좌우 드래그(yaw) = 월드 up 축(화면 수직) → 옆으로 눕혀놔도 '누운 채' 화면 기준 좌우(시계방향)로 돈다.
+  //   (예전 로컬축 post-multiply 는 모델 기준이라 뒤를 보면 위/아래 반대, 눕히면 좌우회전이 텀블로 보였다.)
+  //   Euler 미사용 단일표현(quaternion)→짐벌 없음. 매 회전 normalize() 로 장시간 부동소수 드리프트 방지.
+  let modelSpinTotal = 0;   // 자동회전 누적각(디버그 검증용)
+  function resetModelRot(){ modelGroup.quaternion.setFromAxisAngle(_WORLD_UP, Math.PI); }  // 앞면이 카메라(+Z)를 향함(.vox 앞면 -Z라 180°)
+  function rotateModelYaw(d){ _qd.setFromAxisAngle(_WORLD_UP, d); modelGroup.quaternion.premultiply(_qd).normalize(); }      // 월드 수직축(화면 좌우) — 좌우 드래그/자동
+  function rotateModelPitch(d){ _qd.setFromAxisAngle(_WORLD_RIGHT, d); modelGroup.quaternion.premultiply(_qd).normalize(); } // 월드 수평축(화면 상하) — 위/아래 드래그
   // ★ D) 모델을 캐논 쪽으로 더 가깝게: 캐논은 카메라 자식(local z=-OCTO.dist)이라 octo 외형은 camDist와 무관.
   //   camDist를 줄이면 카메라+캐논이 모델(world z=0)에 가까워져 총알 도달거리(=camDist-OCTO.dist)가 짧아진다.
   //   모델은 커 보이지만 기존 클리어런스 가드(lift+scale)가 슬롯 비침범을 보장하며 압축한다. 캐논 외형 불변.
@@ -5002,7 +4997,8 @@
       window.__warnRelease = () => { _warnHold=false; };   // 강제 경고 해제(자연 로직 복귀)
       window.__spinY = () => modelSpinTotal;    // 자동회전 누적각(회전속도 검증용)
       window.__modelUpY = () => { const v=new THREE.Vector3(0,1,0).applyQuaternion(modelGroup.quaternion); return v.y; };   // 모델 로컬 up 의 월드 Y(눕힌 각도 검증: 자동회전 중 불변이어야 '각도 유지')
-      window.__modelPitch = () => modelPitchAccum;   // 현재 pitch 누적(드래그 검증용)
+      window.__modelFwdY = () => { const v=new THREE.Vector3(0,0,1).applyQuaternion(modelGroup.quaternion); return v.y; };   // 로컬 forward 의 월드 Y(자동회전이 '월드 수직축'이면 불변=턴테이블, 출렁이면 텀블)
+      window.__setYaw = (a) => { resetModelRot(); if (a) rotateModelYaw(a); };   // 검증용: 정면 리셋 후 a 만큼 화면 좌우 회전(0=앞, π=뒤, π/2=옆)
       // __forceGameOver(): 즉시 게임오버 연출(Oops! 버스트 → Out of Space 팝업).
       window.__forceGameOver = () => { setWarning(false); phase='failed'; idleTimer=0; triggerGameOver(); };
       // __warnState(): 경고/게임오버/슬롯/여분 상태 덤프.
@@ -5662,8 +5658,8 @@
     const p=pointFromEvent(e);
     const dx=p.x-player.lastX, dy=p.y-player.lastY;
     player.moved=(player.moved||0)+Math.abs(dx)+Math.abs(dy);
-    rotateModelYaw(dx*0.012);                                    // 좌우 드래그 = 로컬 up 축 회전
-    rotateModelPitch(dy*0.008);                                  // 위아래 드래그 = 로컬 right 축(모델 기준), ±0.9 누적 클램프
+    rotateModelYaw(dx*0.012);                                    // 좌우 드래그 = 화면(월드) 수직축
+    rotateModelPitch(-dy*0.008);                                 // 위아래 드래그 = 화면(월드) 수평축. 위로 드래그(dy<0) → 화면에서 위로 들림(앞/뒤/옆 무관)
     player.lastX=p.x; player.lastY=p.y;
   }
   function onPointerUp(e){
