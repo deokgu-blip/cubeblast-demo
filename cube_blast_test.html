@@ -1021,6 +1021,7 @@
     FAIL_IDLE_SECONDS: 3,
     CONTINUE_COST: 300,            // 게임오버 시 '계속 플레이' 코인 비용
     CRISIS_CANNON_THRESHOLD: 5,
+    CRISIS_VOXEL_FRAC: 0.2,   // 피버 진입: 남은 복셀 ≤ 전체의 이 비율(스테이지 크기 무관 '막바지'를 일관되게). 대포수 임계와 OR.
     CRISIS_SPEED_MULT: 3,     // 피버 때 총알속도·발사간격 3배(사용자 요청, 2→3).
     CRISIS_ROTATE_MULT: 3,    // 피버 때 모델 회전 = 3배(1→3.0rad/s, 사용자 요청 2→3).
     ACTIVE_SLOTS: 5,
@@ -4276,7 +4277,10 @@
   function updateCrisis(){
     if (crisis) return;
     const remaining=queueLength() + slots.filter(s=>s&&s.bullets>0).length;
-    if (remaining<=GAME_CONFIG.CRISIS_CANNON_THRESHOLD && (activeVoxelCount>0)){
+    // 피버 진입 = (남은 대포 ≤ 임계) OR (남은 복셀 ≤ 전체의 일정 비율). 후자가 스테이지 크기 무관하게
+    //   모든 스테이지의 막바지(기본 20%)에 일관되게 피버를 걸어준다(예전엔 큰 스테이지에서 거의 안 걸림).
+    const voxFrac = (stageVoxelTotal>0) ? (activeVoxelCount/stageVoxelTotal) : 1;
+    if (activeVoxelCount>0 && (remaining<=GAME_CONFIG.CRISIS_CANNON_THRESHOLD || voxFrac<=GAME_CONFIG.CRISIS_VOXEL_FRAC)){
       crisis=true; modeSwitchGrace=1.0;
       elVignette.style.opacity='1';
     }
@@ -4481,7 +4485,7 @@
   let mkCx=0,mkCy=0,mkCz=0, mkCurTotal=1, mkDropH=8, mkProj=[], _mkLast=0, _mkLastW=0, _mkLastH=0;
   let mkCelebrating=false, mkCelebT=0, mkPopT=0, mkPopAmp=0.025;       // 디오라마 완성 연출 (mkPopAmp=팝 진폭: 채움=약하게, 완성=강하게)
   const MK_DROP_CAP=20, MK_DROP_DUR=0.16;        // 동시 블록 수(가속 대비 ↑) / 스냅 시간(짧게 → 자석처럼 빠르게 착)
-  const MK_DROP_MAX_PT=8, MK_DROP_ACCEL=0.16;    // tick당 최대 스폰수 / 가속률 — 제작이 진행될수록 점점 빨리 떨어짐(max 캡)
+  const MK_DROP_MAX_PT=16, MK_DROP_ACCEL=0.5;    // tick당 최대 스폰수 / 가속률 — 누를수록 빨리 차오름(max 캡으로 과속 방지). 사용자 요청 가속 강화(8·0.16→16·0.5)
   let mkDropRamp=0;                              // 가속 램프(제작 세션·디오라마마다 0에서 시작)
   let _mkShadowTex=null;
   function mkShadowTexture(){ if(_mkShadowTex) return _mkShadowTex; const c=document.createElement('canvas'); c.width=c.height=128; const g=c.getContext('2d'); const rad=g.createRadialGradient(64,64,3,64,64,62); rad.addColorStop(0,'rgba(16,26,48,.55)'); rad.addColorStop(.55,'rgba(16,26,48,.30)'); rad.addColorStop(1,'rgba(16,26,48,0)'); g.fillStyle=rad; g.fillRect(0,0,128,128); _mkShadowTex=new THREE.CanvasTexture(c); return _mkShadowTex; }
@@ -4653,7 +4657,7 @@
     if(mkCubesLeft<=0 && mkProj.length===0){ mkStopHold(); mkFinish(); }
   }
   let _mkPressWasFinished=false;   // 누름 시작 시점에 이미 완료(Continue) 상태였는지 — 채움 hold를 떼는 동작으로 Continue 오발동 방지
-  function mkStartHold(e){ if(e) e.preventDefault(); _mkPressWasFinished=mkFinished; if(!mkActive||mkCubesLeft<=0||mkFinished) return; mkHold=true; mkBtn.classList.add('holding'); mkTick(); if(!mkTimer) mkTimer=setInterval(mkTick,80); }
+  function mkStartHold(e){ if(e) e.preventDefault(); _mkPressWasFinished=mkFinished; if(!mkActive||mkCubesLeft<=0||mkFinished) return; mkHold=true; mkBtn.classList.add('holding'); mkTick(); if(!mkTimer) mkTimer=setInterval(mkTick,60); }
   function mkStopHold(){ mkHold=false; if(mkTimer){ clearInterval(mkTimer); mkTimer=null; } mkBtn.classList.remove('holding'); syncMeta(); }
   function mkFinish(){ if(mkFinished) return; mkFinished=true; syncMeta();
     // 큐브를 모두 채우면: 같은 초록 버튼 디자인 + 텍스트만 'Continue'. 누르면 다음 스테이지 입장.
