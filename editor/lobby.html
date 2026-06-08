@@ -128,90 +128,7 @@
   .ls-tg.on{background:#3cc451;}
   .ls-tg .k{position:absolute;top:3px;left:3px;width:25px;height:25px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .15s;}
   .ls-tg.on .k{left:30px;}
-</style><link rel="stylesheet" href="editor.css?v=1780899390">
-<script>window.__EDITOR=true;window.__EDITOR_CONFIG={
-  "config": {
-    "BULLET_SPEED": 35,
-    "FIRE_INTERVAL": 0.05
-  },
-  "octo": {
-    "yOff": -1.62,
-    "dist": 13.003885424585281,
-    "scale": 0.59,
-    "tiltX": 0.18,
-    "faceY": 3.141592653589793
-  },
-  "queue": {
-    "scale": 0.57,
-    "colGap": 0.86,
-    "rowGap": 0.6,
-    "baseY": -1.74
-  },
-  "puffMax": 0.3,
-  "slotRow": {
-    "y": 57
-  },
-  "ui": {
-    "preview-strip": {
-      "dy": 12
-    },
-    "coin-pill": {
-      "dy": 10,
-      "scale": 0.83,
-      "dx": -17
-    },
-    "coin-bg": {
-      "scale": 0.77,
-      "dx": 4
-    },
-    "powerups": {
-      "dy": -19,
-      "scale": 1,
-      "dx": 1,
-      "h": 84
-    },
-    "coin-amount": {
-      "dx": -3
-    },
-    "level-label": {
-      "dy": 10,
-      "dx": -43,
-      "scale": 0.83
-    },
-    "settings-btn": {
-      "dy": 1,
-      "scale": 0.71
-    },
-    "make-label": {
-      "dy": -21
-    },
-    "make-next": {
-      "hidden": true
-    },
-    "make-home": {
-      "hidden": true
-    }
-  },
-  "lobby": {
-    "lobby-coinbar": {
-      "dx": -17,
-      "dy": 18,
-      "scale": 0.83
-    },
-    "lobby-coin-bg": {
-      "dx": 4,
-      "scale": 0.77
-    },
-    "lobby-collbtn": {
-      "dy": 113
-    },
-    "lobby-progress": {
-      "dy": -40,
-      "h": 14
-    }
-  }
-};window.__EDITOR_API_BASE=false;</script>
-</head>
+</style></head>
 <body><div id="app" data-edit-id="lobby-app">
   <div id="top" data-edit-id="lobby-top">
     <div id="coinbar" data-edit-id="lobby-coinbar"><div class="coinbg" data-edit-id="lobby-coin-bg"></div><span class="ci" data-edit-id="lobby-coin-icon"></span><span id="coinval" data-edit-id="lobby-coinval">0</span></div>
@@ -487,7 +404,7 @@ const GROUP_DISPLAY={"white": "#fafafa", "red": "#cc2a1a", "yellow": "#ffe40a", 
   const elCoin=document.getElementById('coinval');
   function fmtCoins(v){ return v>=1000?(v/1000).toFixed(2)+'K':String(v|0); }
   const wrap=document.getElementById('gamewrap'), frame=document.getElementById('gameframe');
-  function startGame(){ location.href='cube_blast_release.html?v=__CBVER__&meta='+encodeURIComponent(JSON.stringify(META)); }   // 전체 페이지 전환(iframe 미사용) → 플레이 중 로비 완전 언로드 = GPU 경쟁 0(voxel-drop과 동일 구조)
+  function startGame(){ location.href='cube_blast_release.html?v=1780899390&meta='+encodeURIComponent(JSON.stringify(META)); }   // 전체 페이지 전환(iframe 미사용) → 플레이 중 로비 완전 언로드 = GPU 경쟁 0(voxel-drop과 동일 구조)
   play.onclick=function(){ if(window.lobbyTap) window.lobbyTap(); startGame(); };
   function closeGame(){ wrap.classList.remove('show'); frame.src='about:blank'; render(); }
   window.addEventListener('message', e=>{ const d=e.data; if(!d||typeof d!=='object') return;
@@ -557,5 +474,5 @@ window.LOBBY_AUDIO={"bgm_lobby": "data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAA
   }); }
 })();
 </script>
-<script src="lobby_editor_addon.js?v=1780899390"></script>
+<script>(function(){var C={"lobby-coinbar": {"dx": -17, "dy": 18, "scale": 0.83}, "lobby-coin-bg": {"dx": 4, "scale": 0.77}, "lobby-collbtn": {"dy": 113}, "lobby-progress": {"dy": -40, "h": 14}};function ap(el){var id=el.getAttribute("data-edit-id"),o=C[id];if(!o)return;if(o.hidden){el.style.display="none";return;}var p=[];if(o.dx||o.dy)p.push("translate("+(o.dx||0)+"px,"+(o.dy||0)+"px)");if(o.rot)p.push("rotate("+o.rot+"deg)");if(o.scale&&o.scale!=1)p.push("scale("+o.scale+")");if(p.length){el.style.transform=p.join(" ");el.style.transformOrigin="center center";}if(o.w)el.style.width=o.w+"px";if(o.h)el.style.height=o.h+"px";if(o.font)el.style.fontSize=o.font+"px";if(o.asset){if(el.tagName=="IMG")el.src=o.asset;else{el.style.backgroundImage='url("'+o.asset+'")';if(!el.style.backgroundSize)el.style.backgroundSize="contain";if(!el.style.backgroundRepeat)el.style.backgroundRepeat="no-repeat";if(!el.style.backgroundPosition)el.style.backgroundPosition="center";}}}function bg(){var b=C["@lobby-bg"];if(b&&b.asset)document.documentElement.style.setProperty("--bg2",'url("'+b.asset+'")');}function all(){document.querySelectorAll("[data-edit-id]").forEach(ap);bg();}function boot(){all();new MutationObserver(function(ms){ms.forEach(function(m){m.addedNodes.forEach(function(n){if(n.nodeType!=1)return;if(n.getAttribute&&n.getAttribute("data-edit-id"))ap(n);if(n.querySelectorAll)n.querySelectorAll("[data-edit-id]").forEach(ap);});});}).observe(document.body,{childList:true,subtree:true});}if(document.readyState!="loading")boot();else document.addEventListener("DOMContentLoaded",boot);})();</script>
 </body></html>

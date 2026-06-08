@@ -23,7 +23,8 @@
     {grp:'일반', items:[
       {path:'config.BULLET_SPEED', label:'총알 속도', min:8, max:800, step:1},
       {path:'config.FIRE_INTERVAL', label:'발사 간격(초)', min:0.05, max:1.0, step:0.01},
-      {path:'config.ROTATION_SPEED', label:'모델 회전속도', min:0, max:1, step:0.01},
+      {path:'config.ROTATION_SPEED', label:'모델 기본 회전속도', min:0, max:2, step:0.01, rot:true},
+      {path:'config.CRISIS_ROTATE_SPEED', label:'피버 회전속도', min:0, max:8, step:0.1, rot:'crisis'},
       {path:'config.VOXEL_SIZE', label:'복셀 크기', min:0.3, max:1.5, step:0.02},
       {path:'puffMax', label:'머리 부풂', min:0, max:1, step:0.02},
     ]},
@@ -86,6 +87,43 @@
     redoStack.length=0; updateUndoLabel();
   }
 
+  // ---- 회전속도 라이브 프리뷰 ----
+  // 게임 루프는 phase==='playing' && AUTO_ROTATE && !dragging 일 때만 돈다(에디터는 AUTO_ROTATE=false).
+  // 그래서 에디터에선 별도 RAF 로 모델을 직접 돌려 슬라이더 값을 눈으로 확인시킨다.
+  //   - rotPreview: '회전 미리보기' 토글(켜두면 항상 기본 회전속도로 회전 프리뷰)
+  //   - rotFlashUntil: 회전속도 계열 슬라이더 조작 시 잠깐(2.5s) 자동으로 켜지는 프리뷰
+  //   - rotMode: 'base'(기본)|'crisis'(피버) — 어떤 속도값으로 돌지
+  let rotPreview=false, rotFlashUntil=0, rotMode='base', rotRAF=0, rotLastT=0, rotTotal=0;
+  function rotPreviewActive(){ return (rotPreview || performance.now()<rotFlashUntil); }
+  function rotSpeed(){
+    // 피버 모드면 절대 CRISIS_ROTATE_SPEED, 아니면 기본 ROTATION_SPEED. 게임 로직(line 6658)과 동일 의미.
+    return rotMode==='crisis' ? (+API.config.CRISIS_ROTATE_SPEED||0) : (+API.config.ROTATION_SPEED||0);
+  }
+  function rotTick(t){
+    rotRAF=0;
+    const dt = rotLastT ? Math.min(0.05,(t-rotLastT)/1000) : 0; rotLastT=t;
+    // 복셀편집/2D모드/미리보기(실제 게임루프가 돌리는 중)에는 프리뷰 회전 안 함 — 충돌 방지.
+    if (rotPreviewActive() && !vEdit && !uiMode && !previewing){
+      const sp=rotSpeed();
+      if (sp>0){ try{ API.rotateModelYaw(-sp*dt); rotTotal+=sp*dt; }catch(e){} }
+    }
+    if (rotPreviewActive()) scheduleRot(); else rotLastT=0;
+  }
+  function scheduleRot(){ if(!rotRAF) rotRAF=requestAnimationFrame(rotTick); }
+  // 회전속도 슬라이더 조작 시 호출 → 잠깐 회전 프리뷰 켜고(또는 토글 ON 유지), 모드 설정.
+  function flashRotPreview(it){
+    if (!it || !it.rot) return;
+    rotMode = (it.rot==='crisis') ? 'crisis' : 'base';
+    rotFlashUntil = performance.now()+2500;   // 조작 후 2.5초간 회전(값 확인)
+    scheduleRot();
+  }
+  function setRotPreview(on){
+    rotPreview=on; document.body.classList.toggle('ed-rotpreview', on);
+    const b=window.__edRotBtn; if(b) b.classList.toggle('on', on);
+    if(on){ scheduleRot(); flash('회전 미리보기 ON — 모델이 기본 회전속도로 회전'); }
+    else { flash('회전 미리보기 OFF'); }
+  }
+
   // ---- DOM: toolbar + panel ----
   const sliderEls = {};
   function el(tag, cls, txt){ const e=document.createElement(tag); if(cls)e.className=cls; if(txt!=null)e.textContent=txt; return e; }
@@ -103,10 +141,12 @@
     mkBtn('▶','다음 스테이지',()=>gotoStage(API.stageIndex+1));
     mkBtn('↶ Undo','되돌리기(Cmd/Ctrl+Z)',()=>doUndo());
     mkBtn('펄스','머리 부풂 미리보기',()=>{ try{ API.deployAll(); API.pulseHeads(); }catch(e){} });
+    const rotBtn=mkBtn('🔄 회전','모델 회전 미리보기 켜기/끄기(기본 회전속도)',()=>setRotPreview(!rotPreview)); window.__edRotBtn=rotBtn;
     mkBtn('🧊 복셀편집','이 스테이지 복셀 편집',()=>enterVoxelEdit());
     mkBtn('🖼 2D 리소스','모든 UI/배경: 위치·크기·회전·이미지교체',()=>toggleUIMode());
-    mkBtn('💾 저장','현재 값을 기본값으로 저장(로컬 서버)',()=>save());
-    mkBtn('🛠 빌드','배포용 HTML 빌드 → 다운로드 폴더에 cube_blast.html 저장',()=>build());
+    const saveBtn=mkBtn('💾 저장','현재 값을 기본값으로 저장(로컬 서버)',()=>save());
+    const buildBtn=mkBtn('🛠 빌드','배포용 HTML 빌드 → 다운로드 폴더에 cube_blast.html 저장',()=>build());
+    if (window.__EDITOR_API_BASE===false){ [saveBtn,buildBtn].forEach(b=>{ b.classList.add('ed-disabled'); b.title='정적(폰) 모드: 비활성 — ⬇ Export 사용'; }); }
     mkBtn('⬇ Export','전체 설정(이미지 포함)을 JSON 파일로 다운로드(백엔드 불필요)',()=>exportJSON());
     mkBtn('⬆ Import','JSON 설정 불러오기',()=>importJSON());
     const prevBtn=mkBtn('▶ 미리보기','에디터 UI 숨기고 플레이',()=>togglePreview()); window.__edPreviewBtn=prevBtn;
@@ -125,8 +165,8 @@
         const s=el('input','ed-range'); s.type='range'; s.min=it.min; s.max=it.max; s.step=it.step;
         const num=el('input','ed-num'); num.type='number'; num.min=it.min; num.max=it.max; num.step=it.step;
         const v=getVal(it.path); s.value=v; num.value=fmt(v);
-        const onStart=()=>{ dragStart={path:it.path, from:getVal(it.path)}; };
-        const onInput=(src)=>{ const val=+src.value; setVal(it.path, val, {silent:true}); s.value=val; num.value=fmt(val); };
+        const onStart=()=>{ dragStart={path:it.path, from:getVal(it.path)}; if(it.rot) flashRotPreview(it); };
+        const onInput=(src)=>{ const val=+src.value; setVal(it.path, val, {silent:true}); s.value=val; num.value=fmt(val); if(it.rot) flashRotPreview(it); };
         s.addEventListener('pointerdown', onStart); s.addEventListener('focus', onStart);
         s.addEventListener('input', ()=>onInput(s));
         s.addEventListener('change', ()=>{ if(dragStart&&dragStart.path===it.path){ pushUndo(it.path, dragStart.from, +s.value); dragStart=null; } });
@@ -279,11 +319,14 @@
     if(cfg.perStage&&Object.keys(cfg.perStage).length) out.perStage=cfg.perStage;
     return out;
   }
+  function isStatic(){ return window.__EDITOR_API_BASE===false; }
   async function save(){
+    if (isStatic()){ flash('정적 모드: 저장 비활성 — ⬇ Export 로 JSON 다운로드'); return; }
     try{ const r=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(serialize())}); const j=await r.json(); flash(j.ok?'저장됨 ✓':'저장 실패'); }
     catch(e){ flash('저장 오류: '+e); }
   }
   async function build(){
+    if (isStatic()){ flash('정적 모드: 빌드 비활성 — ⬇ Export 로 JSON 다운로드 후 PC에서 빌드'); return; }
     try{
       await save();
       const r=await fetch('/api/build-release',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
@@ -823,6 +866,9 @@
     enterVoxelEdit, exitVoxelEdit, setVMode:(m)=>{vMode=m;}, setVColor:(c)=>{vColor=c;}, evLen:()=>EV.length, evRef:()=>EV, vUndoFn:undoV, snapshotV, buildVMesh,
     encodeTest:()=>{ try{ return encodeVox(EV); }catch(e){ return {error:e.message}; } },
     exportJSON, importJSON, applyConfig:applyLoadedConfig, serialize,
+    setRotPreview, rotPreviewOn:()=>rotPreview, flashRot:(mode)=>{ flashRotPreview({rot:mode==='crisis'?'crisis':true}); },
+    modelYaw:()=>{ try{ return API.modelGroup.rotation.y; }catch(e){ return 0; } },
+    rotTotal:()=>rotTotal, rotActive:()=>rotPreviewActive(),
     ui:{ toggle:toggleUIMode, mode:()=>uiMode, list:()=>Object.keys(UI_META), sel:()=>uiSel&&uiSel.id,
          select:(id)=>selectUI(UI_META[id]||UI_TREE[0].items[0]),
          set:(id,k,v)=>{ uiPushUndo(id); uiObj(id)[k]=v; applyUI(id); uiOutlineUpdate(); syncUIBar(); buildTreeDots&&buildTreeDots(); },

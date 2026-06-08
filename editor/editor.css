@@ -12,6 +12,8 @@
 .ed-btn:hover{ background:#2f3e57; }
 .ed-btn.on{ background:#3b73d6; border-color:#5b93f6; color:#fff; }
 .ed-stage{ color:#9fb6d6; padding:0 4px; min-width:64px; text-align:center; }
+.ed-btn.ed-disabled{ opacity:.4; }
+.ed-btn.ed-disabled:hover{ background:#243044; }
 
 .ed-panel{ position:fixed; top:8px; right:8px; width:268px; max-height:calc(100vh - 16px); overflow-y:auto;
   z-index:100000; background:#141a24f2; color:#dfe7f2; border:1px solid #2c3a52; border-radius:10px;
