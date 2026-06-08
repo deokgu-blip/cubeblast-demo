@@ -738,6 +738,8 @@
   #make-btn:active { transform:translateX(-50%) translateY(4px) scale(.985); filter:brightness(.95); }
   #make-btn.holding { filter:brightness(1.06) saturate(1.08); }
   #make-btn .cubeicon, #make-btn #make-cubes { position:relative; z-index:1; }
+  /* 숫자(완성 큐브 수) 슬롯을 고정폭+가운데정렬 → 자릿수(10 vs 26 vs 100)가 달라도 좌측 큐브 아이콘 위치가 안 밀린다 */
+  #make-btn #make-cubes { width:64px; text-align:center; box-sizing:border-box; }
   #make-btn .cubeicon { width:34px; height:34px; background:var(--make-cube, linear-gradient(160deg,#eaf7ff,#5fb8f5)) center/contain no-repeat; filter:drop-shadow(0 2px 2px rgba(0,0,0,.32)); }
   #make-btn.done { filter:brightness(1.08); }
   #make-btn .mk-continue-txt { position:relative; z-index:1; font-size:26px; letter-spacing:1px; }
@@ -4135,7 +4137,7 @@
             // [ENABLED per user request] 발사 시 조준 yaw(aimYaw): 목표 보셀의 좌우 위치에 따라 살짝 yaw 조준.
             //   octoPuffStep의 회전 보간과 함께 동작 → 문어가 발사 때 목표 쪽으로 미세하게 돈다.
             c.octo.getWorldPosition(_v2); voxelWorld0(tv, _v3);
-            c.octo.userData.aimYaw = Math.max(-0.4, Math.min(0.4, (_v3.x-_v2.x)*0.14));
+            c.octo.userData.aimYaw = Math.max(-0.65, Math.min(0.65, (_v3.x-_v2.x)*0.22));   // 발사 시 좌우 조준 회전(사용자 요청 강화: 0.14·0.4→0.22·0.65)
           }
           c.shotTimer += OCTO_MULTISHOT_GAP;                     // 다음 발까지 짧은 텀
         } else {
@@ -4163,7 +4165,7 @@
         c.burst = picks.slice(0, got);
         c.shotTimer=0;                              // 첫 발은 즉시
       } else {
-        c.fireCooldown=0.1; // 타겟 없음: 대기(차감 X)
+        c.fireCooldown=(crisis?0.1/GAME_CONFIG.CRISIS_SPEED_MULT:0.1); // 타겟 없음: 대기(피버 땐 배속만큼 짧게 → 막바지 발사 끊김 완화)
       }
     }
   }
@@ -4256,24 +4258,23 @@
   function checkWin(){ return activeVoxelCount<=0; }
 
   let _autoDeployRRCol=0;  // 자동 deploy의 round-robin 시작 col(영구 상태)
+  let _autoDeployTimer=0;  // 피버 순차 자동배치 간격 타이머(한 번에 X → 0.07s 간격 1개씩 빠르게 차례대로)
   // 빈 슬롯을 큐에서 자동 보충 — 항상 호출. 라운드-로빈으로 좌·우 컬럼 모두 골고루.
   // 사용자가 magnet 아이템 등으로 직접 탭해 deploy하는 건 그대로 작동.
-  function autoDeployQueue(){
-    let guard=0;
-    while (queueLength() && firstEmptySlot()>=0 && guard<20){
-      let found=-1;
-      for (let k=0;k<cols.length;k++){
-        const c=(_autoDeployRRCol+k) % cols.length;
-        const f=cols[c][0];
-        if (f && _isThawed(f, false)){ found=c; break; }   // 🧊 얼은 앞 항목은 자동배치에서도 건너뜀
-      }
-      if (found<0) break;   // 배치 가능한 앞 항목 없음(전부 얼었거나 빈 큐) → 멈춤
-      const ok=deployFromQueueColRow(found, 0);
-      _autoDeployRRCol = (found+1) % cols.length;
-      if (!ok) break;       // 배치 실패(연속칸 부족 등) → 무한루프 방지
-      guard++;
+  function autoDeployOne(){   // 큐 앞에서 1개만 슬롯에 자동배치(라운드-로빈). 성공 시 true.
+    if (!(queueLength() && firstEmptySlot()>=0)) return false;
+    let found=-1;
+    for (let k=0;k<cols.length;k++){
+      const c=(_autoDeployRRCol+k) % cols.length;
+      const f=cols[c][0];
+      if (f && _isThawed(f, false)){ found=c; break; }   // 🧊 얼은 앞 항목은 자동배치에서도 건너뜀
     }
+    if (found<0) return false;   // 배치 가능한 앞 항목 없음(전부 얼었거나 빈 큐)
+    const ok=deployFromQueueColRow(found, 0);
+    _autoDeployRRCol = (found+1) % cols.length;
+    return ok;
   }
+  function autoDeployQueue(){ let guard=0; while (guard<20 && autoDeployOne()) guard++; }   // 즉시 전부 채움(비피버 경로용)
   function updateCrisis(){
     if (crisis) return;
     const remaining=queueLength() + slots.filter(s=>s&&s.bullets>0).length;
@@ -4959,7 +4960,7 @@
     puMode=null; updateModeHint();
     crisis=false; elVignette.style.opacity='0';
     setWarning(false); hideGameOver(); hideOopsBurst();   // 경고/게임오버 연출 초기화
-    _autoDeployRRCol=0; _deployCount=0;   // 🧊 frozen 해동 카운터 리셋
+    _autoDeployRRCol=0; _deployCount=0; _autoDeployTimer=0;   // 🧊 frozen 해동 카운터 리셋
     idleTimer=0; firstDeployDone=false; modeSwitchGrace=0;
     comboCount=0; resetModelRot();   // 앞면이 카메라를 향하도록 시작(뒤집힘 방지)
     phase='playing';
@@ -6674,7 +6675,7 @@
       updateFlashes(dt);
       if (!window.__EDITOR_PAUSE){
         updateCrisis();      // crisis(fever) 진입 판정: 남은 대포 ≤ 임계 → 2배속
-        if (crisis) autoDeployQueue();   // fever: 남은 문어 전부 슬롯 자동 배치(2배속 마무리)
+        if (crisis){ _autoDeployTimer-=dt; if (_autoDeployTimer<=0 && autoDeployOne()) _autoDeployTimer=0.07; }   // fever: 한꺼번에 X → 0.07s 간격 1개씩 '빠르게 차례대로' 올라옴
       }
 
       if (!window.__EDITOR_PAUSE){
