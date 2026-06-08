@@ -1021,7 +1021,6 @@
     FAIL_IDLE_SECONDS: 3,
     CONTINUE_COST: 300,            // 게임오버 시 '계속 플레이' 코인 비용
     CRISIS_CANNON_THRESHOLD: 5,
-    CRISIS_VOXEL_FRAC: 0.2,   // 피버 진입: 남은 복셀 ≤ 전체의 이 비율(스테이지 크기 무관 '막바지'를 일관되게). 대포수 임계와 OR.
     CRISIS_SPEED_MULT: 3,     // 피버 때 총알속도·발사간격 3배(사용자 요청, 2→3).
     CRISIS_ROTATE_MULT: 3,    // 피버 때 모델 회전 = 3배(1→3.0rad/s, 사용자 요청 2→3).
     ACTIVE_SLOTS: 5,
@@ -4277,10 +4276,7 @@
   function updateCrisis(){
     if (crisis) return;
     const remaining=queueLength() + slots.filter(s=>s&&s.bullets>0).length;
-    // 피버 진입 = (남은 대포 ≤ 임계) OR (남은 복셀 ≤ 전체의 일정 비율). 후자가 스테이지 크기 무관하게
-    //   모든 스테이지의 막바지(기본 20%)에 일관되게 피버를 걸어준다(예전엔 큰 스테이지에서 거의 안 걸림).
-    const voxFrac = (stageVoxelTotal>0) ? (activeVoxelCount/stageVoxelTotal) : 1;
-    if (activeVoxelCount>0 && (remaining<=GAME_CONFIG.CRISIS_CANNON_THRESHOLD || voxFrac<=GAME_CONFIG.CRISIS_VOXEL_FRAC)){
+    if (remaining<=GAME_CONFIG.CRISIS_CANNON_THRESHOLD && (activeVoxelCount>0)){
       crisis=true; modeSwitchGrace=1.0;
       elVignette.style.opacity='1';
     }
@@ -4970,6 +4966,7 @@
     hideStageClear();   // 다음 스테이지 시작 시 클리어 오버레이 제거
     playerScoreVal=0;   // 다음 스테이지 코인 보상을 새로 카운트
     renderHUD(); renderSlots(); renderQueue(); renderPowerups(); renderPreview();
+    if (!_demoStage){ try{ syncMeta(); }catch(e){} }   // ★ 스테이지 진입 즉시 진행도(현재 레벨) 저장 → 새로고침해도 '정확히 이 레벨'로 복원(예전엔 loadStage가 저장 안 해 한 단계 어긋남)
     // DEV-ONLY 디버그 후크: 색깔별 invariant 검증용. 프리뷰/테스트 모드(__TEST_INFINITE_PU)에서만 노출.
     if (window.__TEST_INFINITE_PU){
       // 디버그용: 즉시 클리어 트리거 (실제 게임 흐름에는 영향 없음)
