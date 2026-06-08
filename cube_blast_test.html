@@ -3064,7 +3064,7 @@
   // 슬롯 문어만(큐는 X). recoilT 시작 시 base 위치를 캡처해 매 프레임 base+감쇠지터로 복원 → 드리프트 0.
   let OCTO_RECOIL_DUR=0.11;     // 떨림 지속(≤0.12s)
   let OCTO_RECOIL_FREQ=70;      // 떨림 진동수(빠른 떨림)
-  let OCTO_RECOIL_AMP=0.030;    // 떨림 진폭(world 단위). 흔들림 줄임(0.045→0.030).
+  let OCTO_RECOIL_AMP=0.020;    // 떨림 진폭(world 단위). 사용자 요청으로 더 낮춤(0.045→0.030→0.020).
   function octoRecoilStep(octo, dt){
     if (!octo) return;
     let t=octo.userData.recoilT;
