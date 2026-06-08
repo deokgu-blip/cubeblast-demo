@@ -1623,21 +1623,23 @@
 
   const modelGroup = new THREE.Group();
   world.add(modelGroup);
-  const _WORLD_UP = new THREE.Vector3(0,1,0);   // 자동회전 축 = 월드(카메라 화면) 수직축 → 드래그로 기울여도 좌우로만 회전
+  const _WORLD_UP = new THREE.Vector3(0,1,0);
   const _WORLD_RIGHT = new THREE.Vector3(1,0,0);
-  const _qYaw = new THREE.Quaternion(), _qPitch = new THREE.Quaternion(), _qSpin = new THREE.Quaternion();
-  // ★ 모델 방향을 'yaw(월드 수직축 회전)·pitch(월드 수평축 기울임)' 스칼라로 관리 → 매 프레임 쿼터니언 재구성.
-  //   (예전엔 자동회전=쿼터니언·드래그=Euler 혼용이라, 모델 끝 터치 시 Euler 분해의 짐벌 불연속으로 '뒤집힘'이 났다.)
-  //   Q = Ryaw(worldUp) · Rpitch(worldRight) · Rspin(localUp): pitch 를 yaw '안쪽'에 둬 위/아래 드래그가
-  //   '모델이 돌아간 방향 기준'으로 현재 위치에서 회전한다(사용자 확인 완료). clamp(±0.9)로 과회전 방지.
-  //   ★ 자동회전(좌우 spin)은 '모델의 로컬 up 축'(가장 안쪽)으로 돈다 → 모델을 눕혀놓으면 그 눕혀진 각도를
-  //   유지한 채 '카메라 시점 기준' 화면 평면에서 시계방향으로 돈다(눕힐수록 로컬 up 이 카메라쪽을 향하므로).
-  let modelYaw = Math.PI, modelPitch = 0, modelSpin = 0;
-  function applyModelRot(){
-    _qYaw.setFromAxisAngle(_WORLD_UP, modelYaw);
-    _qPitch.setFromAxisAngle(_WORLD_RIGHT, modelPitch);
-    _qSpin.setFromAxisAngle(_WORLD_UP, modelSpin);
-    modelGroup.quaternion.copy(_qYaw).multiply(_qPitch).multiply(_qSpin);   // spin=로컬 up(최내측) → 눕힌 각도 유지한 채 카메라 기준 회전
+  const _qd = new THREE.Quaternion();   // 증분 회전 누적용
+  // ★ 회전 = 증분 쿼터니언 '트랙볼': 모든 입력/자동회전을 modelGroup.quaternion 에 '로컬축 post-multiply' 로 누적.
+  //   - 상하 드래그(pitch) = 로컬 right 축 → 모델이 돌아간 방향 기준으로 현재 위치에서 위/아래 기울임(사용자 확인 완료).
+  //   - 자동회전·좌우 드래그(yaw) = 로컬 up 축 → 모델을 눕혀놓으면 로컬 up 이 안 움직여 '눕혀진 각도를 유지'한 채
+  //     카메라 시점 기준 화면 평면에서 시계방향으로 돈다(눕힐수록 로컬 up 이 카메라를 향함).
+  //   pitch 누적값만 ±0.9 클램프(과회전 방지). Euler 미사용 단일표현(quaternion) → 짐벌 뒤집힘 없음.
+  //   매 회전마다 normalize() 로 장시간 자동회전의 부동소수 드리프트 방지.
+  let modelPitchAccum = 0, modelSpinTotal = 0;   // pitch 누적(클램프용) / 자동회전 누적각(디버그 검증용)
+  const PITCH_LIMIT = 0.9;
+  function resetModelRot(){ modelGroup.quaternion.setFromAxisAngle(_WORLD_UP, Math.PI); modelPitchAccum = 0; }  // 앞면이 카메라(+Z)를 향함(.vox 앞면 -Z라 180°)
+  function rotateModelYaw(d){ _qd.setFromAxisAngle(_WORLD_UP, d); modelGroup.quaternion.multiply(_qd).normalize(); }   // 로컬 up 축(좌우/자동)
+  function rotateModelPitch(dy){                                                                                       // 로컬 right 축 + 누적 클램프
+    const np = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, modelPitchAccum + dy));
+    const ap = np - modelPitchAccum; modelPitchAccum = np;
+    if (ap !== 0){ _qd.setFromAxisAngle(_WORLD_RIGHT, ap); modelGroup.quaternion.multiply(_qd).normalize(); }
   }
   // ★ D) 모델을 캐논 쪽으로 더 가깝게: 캐논은 카메라 자식(local z=-OCTO.dist)이라 octo 외형은 camDist와 무관.
   //   camDist를 줄이면 카메라+캐논이 모델(world z=0)에 가까워져 총알 도달거리(=camDist-OCTO.dist)가 짧아진다.
@@ -4938,7 +4940,7 @@
     if (!_demoStage){ stageIndex=idx % STAGES.length; META.level=stageIndex+1; }  // 데모는 stageIndex/레벨 건드리지 않음
     const st=curStage();               // 데모 활성 시 합성 스테이지, 아니면 STAGES[stageIndex]
     GAME_CONFIG.ROTATION_SPEED = st.rotationSpeed!==undefined? st.rotationSpeed : GAME_CONFIG.ROTATION_SPEED;
-    modelYaw = Math.PI; modelPitch = 0; modelSpin = 0; applyModelRot();   // 시작 시 앞면이 카메라(+Z)를 향하게(.vox 앞면 -Z라 180°)
+    resetModelRot();   // 시작 시 앞면이 카메라(+Z)를 향하게(.vox 앞면 -Z라 180°)
     buildVoxelMesh(st.modelId);
     // 결과창/로비 블록 보상: 클리어 시 부순 블록 = 전체 복셀. 색별 구성도 기록(색깔 블록 인벤토리용).
     stageVoxelTotal = voxels.length;
@@ -4953,7 +4955,7 @@
     setWarning(false); hideGameOver(); hideOopsBurst();   // 경고/게임오버 연출 초기화
     _autoDeployRRCol=0; _deployCount=0;   // 🧊 frozen 해동 카운터 리셋
     idleTimer=0; firstDeployDone=false; modeSwitchGrace=0;
-    comboCount=0; modelYaw=Math.PI; modelPitch=0; modelSpin=0; applyModelRot();   // 앞면이 카메라를 향하도록 시작(뒤집힘 방지)
+    comboCount=0; resetModelRot();   // 앞면이 카메라를 향하도록 시작(뒤집힘 방지)
     phase='playing';
     clearResult();
     hideStageClear();   // 다음 스테이지 시작 시 클리어 오버레이 제거
@@ -4998,7 +5000,9 @@
         return { slots:slots.filter(Boolean).length, empty:emptySlotCount(), firing:anySlotFiring(), idleTimer, warning };
       };
       window.__warnRelease = () => { _warnHold=false; };   // 강제 경고 해제(자연 로직 복귀)
-      window.__spinY = () => modelYaw;          // 모델 회전 각(yaw, 회전속도 검증용)
+      window.__spinY = () => modelSpinTotal;    // 자동회전 누적각(회전속도 검증용)
+      window.__modelUpY = () => { const v=new THREE.Vector3(0,1,0).applyQuaternion(modelGroup.quaternion); return v.y; };   // 모델 로컬 up 의 월드 Y(눕힌 각도 검증: 자동회전 중 불변이어야 '각도 유지')
+      window.__modelPitch = () => modelPitchAccum;   // 현재 pitch 누적(드래그 검증용)
       // __forceGameOver(): 즉시 게임오버 연출(Oops! 버스트 → Out of Space 팝업).
       window.__forceGameOver = () => { setWarning(false); phase='failed'; idleTimer=0; triggerGameOver(); };
       // __warnState(): 경고/게임오버/슬롯/여분 상태 덤프.
@@ -5658,9 +5662,8 @@
     const p=pointFromEvent(e);
     const dx=p.x-player.lastX, dy=p.y-player.lastY;
     player.moved=(player.moved||0)+Math.abs(dx)+Math.abs(dy);
-    modelYaw += dx*0.012;                                        // 좌우 드래그 = 화면축 yaw(월드 수직)
-    modelPitch = Math.max(-0.9, Math.min(0.9, modelPitch + dy*0.008));   // 위아래 = pitch(클램프) — 짐벌 뒤집힘 없음
-    applyModelRot();
+    rotateModelYaw(dx*0.012);                                    // 좌우 드래그 = 로컬 up 축 회전
+    rotateModelPitch(dy*0.008);                                  // 위아래 드래그 = 로컬 right 축(모델 기준), ±0.9 누적 클램프
     player.lastX=p.x; player.lastY=p.y;
   }
   function onPointerUp(e){
@@ -6645,7 +6648,7 @@
         //   시계방향(위에서 볼 때) = up 축 음(-)의 회전. crisis(피버)=2배(CRISIS_ROTATE_MULT), warning=2배. 둘 중 큰 배율.
         const boost=Math.max(crisis?GAME_CONFIG.CRISIS_ROTATE_MULT:1, warning?GAME_CONFIG.CRISIS_SPEED_MULT:1);
         const sp=GAME_CONFIG.ROTATION_SPEED*boost;
-        modelSpin -= sp*dt; applyModelRot();   // 자동회전=모델 로컬 up 축 spin → 눕힌 각도 유지한 채 카메라 시점 기준 시계방향
+        rotateModelYaw(-sp*dt); modelSpinTotal -= sp*dt;   // 자동회전=로컬 up 축 → 눕힌 각도 유지한 채 카메라 시점 기준 시계방향
       }
 
       if (!window.__EDITOR_PAUSE) updateFiring(dt);
