@@ -182,6 +182,15 @@
     white-space:nowrap;
   }
   .level-label::before { content:none; }
+  /* 🧪 스테이지 좌우 화살표(테스트 모드 전용; JS가 display 켬). 라벨 '중앙 기준 ±고정 오프셋'이라 LEVEL 길이/스테이지명과 무관하게 항상 같은 위치 */
+  .stage-nav{ position:absolute; top:calc(44px + var(--safe-top)); width:30px; height:30px;
+    display:none; align-items:center; justify-content:center; pointer-events:auto; z-index:121;
+    background:rgba(8,20,42,0.55); border:none; border-radius:8px; color:#fff; cursor:pointer;
+    font:700 14px/1 'PixelifySans','Jua',sans-serif; padding:0; text-shadow:0 1px 2px rgba(0,0,0,.45);
+    -webkit-tap-highlight-color:transparent; }
+  .stage-nav:active{ opacity:.55; }
+  #stage-prev{ left:calc(50% - 56px); transform:translateX(-50%); }
+  #stage-next{ left:calc(50% + 56px); transform:translateX(-50%); }
   /* 설정 버튼 — 원본처럼 빨강 라운드 사각 + 흰 기어 */
   /* 설정 기어: #fit-root 직속 → 화면 우측 끝(safe-area 여백)에 고정 */
   #settings-btn {
@@ -943,6 +952,8 @@
   <div id="hud-top" data-edit-id="hud-top">
     <div class="coin-pill" data-edit-id="coin-pill"><div class="coin-bg" data-edit-id="coin-bg"></div><span class="coin-icon" data-edit-id="coin-icon"></span><span id="coin-amount" data-edit-id="coin-amount">1.27K</span></div>
     <div class="level-label" id="level-label" data-edit-id="level-label">LEVEL 1</div>
+    <button id="stage-prev" class="stage-nav" aria-label="Prev stage">&#9664;</button>
+    <button id="stage-next" class="stage-nav" aria-label="Next stage">&#9654;</button>
   </div>
   <!-- 처음부터 재시작 버튼(스테이지/파워업 모두 초기화) -->
   <button id="settings-btn" data-edit-id="settings-btn" aria-label="Settings"><svg viewBox="0 0 24 24" width="23" height="23" aria-hidden="true"><path fill="#fff" d="M19.14 12.94a7.5 7.5 0 000-1.88l2.03-1.58a.5.5 0 00.12-.64l-1.92-3.32a.5.5 0 00-.61-.22l-2.39.96a7.3 7.3 0 00-1.62-.94l-.36-2.54A.5.5 0 0013.9 2h-3.8a.5.5 0 00-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 00-.61.22L2.7 8.84a.5.5 0 00.12.64l2.03 1.58a7.5 7.5 0 000 1.88L2.82 14.5a.5.5 0 00-.12.64l1.92 3.32a.5.5 0 00.61.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54a.5.5 0 00.5.42h3.8a.5.5 0 00.5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96a.5.5 0 00.61-.22l1.92-3.32a.5.5 0 00-.12-.64l-2.03-1.56zM12 15.5A3.5 3.5 0 1112 8.5a3.5 3.5 0 010 7z"/></svg></button>
@@ -6498,6 +6509,11 @@
     if (!btn || !ov || !list) return;
     if (!window.__TEST_INFINITE_PU) return;   // 릴리스: 미노출(버튼 display:none 유지)
     btn.style.display='flex';
+    // 🧪 스테이지 좌우 화살표(테스트 모드): prev/next 스테이지 즉시 이동(끝에서 순환). 위치는 CSS 고정(라벨 길이 무관).
+    { const sp=document.getElementById('stage-prev'), sn=document.getElementById('stage-next');
+      if (sp && sn){ sp.style.display='flex'; sn.style.display='flex';
+        sp.addEventListener('pointerdown', e=>{ e.stopPropagation(); jumpToStage(((stageIndex - 1 + STAGES.length) % STAGES.length) + 1); });
+        sn.addEventListener('pointerdown', e=>{ e.stopPropagation(); jumpToStage(((stageIndex + 1) % STAGES.length) + 1); }); } }
     function openTester(){ playSfx('sfx_tap'); ov.classList.add('show'); }
     function closeTester(){ ov.classList.remove('show'); }
     btn.addEventListener('pointerdown', e=>{ e.stopPropagation(); openTester(); });
