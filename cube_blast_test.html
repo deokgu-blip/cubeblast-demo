@@ -5659,7 +5659,7 @@
     const dx=p.x-player.lastX, dy=p.y-player.lastY;
     player.moved=(player.moved||0)+Math.abs(dx)+Math.abs(dy);
     rotateModelYaw(dx*0.012);                                    // 좌우 드래그 = 화면(월드) 수직축
-    rotateModelPitch(-dy*0.008);                                 // 위아래 드래그 = 화면(월드) 수평축. 위로 드래그(dy<0) → 화면에서 위로 들림(앞/뒤/옆 무관)
+    rotateModelPitch(dy*0.008);                                  // 위아래 드래그 = 화면(월드) 수평축. 위로 드래그(dy<0) → 아래쪽이 들림(사용자 요청 방향, 앞/뒤/옆 무관)
     player.lastX=p.x; player.lastY=p.y;
   }
   function onPointerUp(e){
